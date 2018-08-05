@@ -1,0 +1,13 @@
+[package]
+name = "nt-packet-derive"
+version = "0.1.0"
+authors = ["Redrield <redrield@gmail.com>"]
+
+[lib]
+proc-macro = true
+
+[dependencies]
+nt-packet = { path = "../nt-packet" }
+syn = "0.14.7"
+quote = "0.6.5"
+proc-macro2 = "0.4.9"
