@@ -1,7 +1,7 @@
 use tokio_codec::{Encoder, Decoder};
 use bytes::{BytesMut, IntoBuf};
 
-use nt_packet::{ClientMessage, ServerMessage};
+use nt_packet::ClientMessage;
 use super::Packet;
 
 use std::io::Error;

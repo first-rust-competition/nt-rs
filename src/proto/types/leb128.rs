@@ -1,36 +1,10 @@
-use bytes::{BytesMut, BufMut, Buf};
+use bytes::Buf;
 use std::u8;
 
 const CONTINUATION_BIT: u8 = 1 << 7;
 
-fn low_bits_of_u64(val: u64) -> u8 {
-    let byte = val & (u8::MAX as u64);
-    low_bits_of_byte(byte as u8)
-}
-
 fn low_bits_of_byte(val: u8) -> u8 {
     val & !CONTINUATION_BIT
-}
-
-// Shamelessly stolen from leb128 crate, made to work with BytesMut
-pub fn write(buf: &mut BytesMut, mut val: u64) -> usize {
-    let mut bytes_written = 0;
-
-    loop {
-        let mut byte = low_bits_of_u64(val);
-        val >>= 7;
-        if val != 0 {
-            byte |= CONTINUATION_BIT;
-        }
-
-        buf.put_u8(byte);
-
-        bytes_written += 1;
-
-        if val == 0 {
-            return bytes_written;
-        }
-    }
 }
 
 pub fn read(buf: &mut dyn Buf) -> u64 {

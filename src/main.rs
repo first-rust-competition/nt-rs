@@ -19,45 +19,47 @@ use proto::codec::NTCodec;
 use proto::client::*;
 use proto::Packet;
 
-
-use bytes::{BytesMut, IntoBuf, BufMut};
-
-use nt_packet::*;
 use tokio::net::TcpStream;
-use tokio::io::AsyncRead;
 use tokio_codec::Decoder;
-use tokio::timer::Interval;
 use futures::{Stream, Sink, Future};
-use futures::sync::mpsc::channel;
+use futures::future::ok;
+use futures::future::Either;
 
 fn main() -> Result<()> {
     let client = TcpStream::connect(&"127.0.0.1:1735".parse()?)
         .and_then(|sock| {
-            let mut codec = NTCodec.framed(sock);
+            let codec = NTCodec.framed(sock);
             let hello = ClientHello::new(NT_PROTOCOL_REV, "nt-rs");
             //TODO: State
 
             let start = codec.send(Box::new(hello)).and_then(|codec| {
-                let (mut tx, rx) = codec.split();
-                let poll = rx.for_each(|packet| {
-                    match packet {
-                        Packet::ServerHello(packet) => {
-                            println!("Got server hello: {:?}", packet);
-                        }
-                        Packet::ServerHelloComplete(_) => {
-                            println!("Got server hello complete");
-                        }
-                        Packet::ProtocolVersionUnsupported(packet) => {
-                            println!("Got this {:?}", packet);
-                        }
-                        Packet::EntryAssignment(ass /* heheheh */) => {
-                            println!("uuh {:?}", ass);
-                        }
-                        _ => {}
-                    }
+                let (tx, rx) = codec.split();
+                let poll = rx
+                    .fold(tx, |tx, packet| {
+                        let resp = match packet {
+                            Packet::ServerHello(packet) => {
+                                println!("Got server hello: {:?}", packet);
+                                Either::B(ok(tx))
+                            }
+                            Packet::ServerHelloComplete(_) => {
+                                println!("Got server hello complete");
+                                println!("Sent ClientHelloComplete");
+                                Either::A(tx.send(Box::new(ClientHelloComplete)))
+                            }
+                            Packet::ProtocolVersionUnsupported(packet) => {
+                                println!("Got this {:?}", packet);
+                                Either::B(ok(tx))
+                            }
+                            Packet::EntryAssignment(ass /* heheheh */) => {
+                                println!("uuh {:?}", ass);
+                                Either::B(ok(tx))
+                            }
+                            _ => Either::B(ok(tx))
+                        };
 
-                    Ok(())
-                }).map_err(|e| println!("Got error {:?}", e));
+                        resp
+                    }).map_err(|e| println!("Got error {:?}", e))
+                    .map(|_| ());
 
                 tokio::spawn(poll);
                 Ok(())
