@@ -24,40 +24,75 @@ pub struct Result {
 }
 
 impl ServerMessage for Result {
-    fn decode(buf: &mut Buf) -> Option<Self> {
-        let result_type = EntryType::decode(buf)?;
-        let result_name = String::decode(buf)?;
+    fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
+        let (result_type, bytes_read) = EntryType::decode(buf);
+        let (result_name, name_bytes_read) = String::decode(buf);
 
-        Some(Result { result_type, result_name })
+        (Some(Result { result_type: result_type.unwrap(), result_name: result_name.unwrap() }), bytes_read + name_bytes_read)
     }
 }
 
 impl ServerMessage for Parameter {
-    fn decode(buf: &mut Buf) -> Option<Self> {
-        let parameter_type = EntryType::decode(buf)?;
-        let parameter_name = String::decode(buf)?;
-        let parameter_default = parameter_type.get_entry(buf);
+    fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
+        let mut bytes_read = 0;
+        let parameter_type = {
+            let (parameter_type, bytes) = EntryType::decode(buf);
+            bytes_read += bytes;
+            parameter_type.unwrap()
+        };
+
+        let parameter_name = {
+            let (parameter_name, bytes) = String::decode(buf);
+            bytes_read += bytes;
+            parameter_name.unwrap()
+        };
+
+        let (parameter_default, bytes_read_entry) = parameter_type.get_entry(buf);
+        bytes_read += bytes_read_entry;
+
 
         let len = buf.get_u8() as usize;
-        let results = Vec::with_capacity(len);
+        bytes_read += 1;
+
+        let mut results = Vec::with_capacity(len);
         for i in 0..len {
-            results[i] = Result::decode(buf)?;
+            let (res, bytes) = Result::decode(buf);
+            bytes_read += bytes;
+            results[i] = res.unwrap();
         }
 
-        Some(Parameter { parameter_type, parameter_name, parameter_default, result_size: len, results})
+        (Some(Parameter {
+            parameter_type,
+            parameter_name,
+            parameter_default,
+            result_size: len,
+            results
+        }), bytes_read)
     }
 }
 
 impl ServerMessage for RPCDefinitionData {
-    fn decode(buf: &mut Buf) -> Option<Self> {
+    fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
+        let mut bytes_read = 0;
+
         let ver = buf.get_u8();
-        let procedure_name = String::decode(buf)?;
+        bytes_read += 1;
+        let procedure_name = {
+            let (procedure_name, string_bytes_read) = String::decode(buf);
+            bytes_read += string_bytes_read;
+            procedure_name.unwrap()
+        };
+
         let len = buf.get_u8() as usize;
-        let parameters = Vec::with_capacity(len);
+        bytes_read += 1;
+        let mut parameters = Vec::with_capacity(len);
+
         for i in 0..len {
-            parameters[i] = Parameter::decode(buf)?;
+            let (param, bytes) = Parameter::decode(buf);
+            bytes_read += bytes;
+            parameters[i] = param.unwrap();
         }
 
-        Some(RPCDefinitionData { version: ver, procedure_name, parameters_size: len, parameters })
+        (Some(RPCDefinitionData { version: ver, procedure_name, parameters_size: len, parameters }), bytes_read)
     }
 }

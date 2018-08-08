@@ -5,9 +5,9 @@ authors = ["Redrield <redrield@gmail.com>"]
 
 [dependencies]
 tokio = "0.1.7"
-futures = "0.1.23"
 bytes = "0.4.9"
 nt-packet = { path = "./nt-packet" }
 nt-packet-derive = { path = "./nt-packet-derive" }
 failure = "0.1.2"
 tokio-codec = "0.1.0"
+futures = "0.1.23"

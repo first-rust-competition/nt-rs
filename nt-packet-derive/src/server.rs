@@ -15,13 +15,19 @@ pub fn gen_server_packet_derive(input: DeriveInput) -> TokenStream {
                 let ident = field.ident.unwrap().clone();
                 let ty_name = util::parse_type(&field.ty).unwrap();
                 let fn_name = name_for_ty(&ty_name.to_string());
+                let (fn_name, bytes) = name_for_ty(&ty_name.to_string());
                 let part = if let Some(func) = fn_name {
                     quote! {
                         let #ident = buf.#func();
+                        bytes_read += #bytes;
                     }
                 } else {
                     quote! {
-                        let #ident = <#ty_name as ::nt_packet::ServerMessage>::decode(buf).unwrap();
+                        let #ident = {
+                            let (a, b) = <#ty_name as ::nt_packet::ServerMessage>::decode(buf);
+                            bytes_read += b;
+                            a.unwrap()
+                        };
                     }
                 };
                 parts.push(part);
@@ -32,28 +38,29 @@ pub fn gen_server_packet_derive(input: DeriveInput) -> TokenStream {
 
     quote! {
         impl ::nt_packet::ServerMessage for #struct_ident {
-            fn decode(buf: &mut ::bytes::Buf) -> Option<Self> {
+            fn decode(buf: &mut ::bytes::Buf) -> (Option<Self>, usize) {
+                let mut bytes_read = 0usize;
                 //TODO
                 #(#parts)*
 
-                Some(#struct_ident {
+                (Some(#struct_ident {
                     #(#idents,)*
-                })
+                }), bytes_read)
             }
         }
     }
 }
 
-pub fn name_for_ty(ty_name: &str) -> Option<Ident> {
+pub fn name_for_ty(ty_name: &str) -> (Option<Ident>, usize) {
     match ty_name {
-        "u8" => Some(Ident::new("get_u8", Span::call_site())),
-        "i8" => Some(Ident::new("get_i8", Span::call_site())),
-        "u16" => Some(Ident::new("get_u16_be", Span::call_site())),
-        "i16" => Some(Ident::new("get_i16_be", Span::call_site())),
-        "u32" => Some(Ident::new("get_u32_be", Span::call_site())),
-        "i32" => Some(Ident::new("get_i32_be", Span::call_site())),
-        "u64" => Some(Ident::new("get_u64_be", Span::call_site())),
-        "i64" => Some(Ident::new("get_i64_be", Span::call_site())),
-        _ => None
+        "u8" => (Some(Ident::new("get_u8", Span::call_site())), 1),
+        "i8" => (Some(Ident::new("get_i8", Span::call_site())), 1),
+        "u16" => (Some(Ident::new("get_u16_be", Span::call_site())), 2),
+        "i16" => (Some(Ident::new("get_i16_be", Span::call_site())), 2),
+        "u32" => (Some(Ident::new("get_u32_be", Span::call_site())), 4),
+        "i32" => (Some(Ident::new("get_i32_be", Span::call_site())), 4),
+        "u64" => (Some(Ident::new("get_u64_be", Span::call_site())), 8),
+        "i64" => (Some(Ident::new("get_i64_be", Span::call_site())), 8),
+        _ => (None, 0)
     }
 }

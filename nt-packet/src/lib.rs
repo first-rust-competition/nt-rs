@@ -5,17 +5,18 @@ use bytes::{Buf, BytesMut, BufMut};
 mod leb128;
 
 /// Trait representing an NT message/packet headed Client --> Server
-pub trait ClientMessage {
+pub trait ClientMessage: Send {
     /// Encodes `Self` into the given `buf`
     fn encode(&self, buf: &mut BytesMut);
 }
+
 
 /// Trait representing an NT message/packet headed Server --> Client
 pub trait ServerMessage {
     /// Attempts to decode `Self` from the given `buf`
     /// Returns Some if the given `buf` was a valid NT packet
     /// Returns None if the given `buf` was malformed, or otherwise invalid
-    fn decode(buf: &mut Buf) -> Option<Self>
+    fn decode(buf: &mut Buf) -> (Option<Self>, usize)
         where Self: Sized;
 }
 
@@ -27,10 +28,10 @@ impl ClientMessage for String {
 }
 
 impl ServerMessage for String {
-    fn decode(buf: &mut Buf) -> Option<Self> {
+    fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
         let len = ::leb128::read(buf) as usize;
         let mut strbuf = vec![0; len];
         buf.copy_to_slice(&mut strbuf[..]);
-        Some(::std::string::String::from_utf8(strbuf).unwrap())
+        (Some(::std::string::String::from_utf8(strbuf).unwrap()), len + 1)
     }
 }

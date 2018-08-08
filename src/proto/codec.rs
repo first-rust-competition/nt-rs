@@ -1,8 +1,10 @@
 use tokio_codec::{Encoder, Decoder};
 use bytes::{BytesMut, IntoBuf};
-use failure;
 
 use nt_packet::{ClientMessage, ServerMessage};
+use super::Packet;
+
+use std::io::Error;
 
 use super::try_decode;
 
@@ -10,7 +12,7 @@ pub struct NTCodec;
 
 impl Encoder for NTCodec {
     type Item = Box<ClientMessage>;
-    type Error = failure::Error;
+    type Error = Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         item.encode(dst);
@@ -19,10 +21,16 @@ impl Encoder for NTCodec {
 }
 
 impl Decoder for NTCodec {
-    type Item = Box<ServerMessage>;
-    type Error = failure::Error;
+    type Item = Packet;
+    type Error = Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        Ok(try_decode(&mut src.freeze().clone().into_buf()))
+        let mut buf = src.clone().freeze().into_buf();
+        let (packet, bytes_read) = try_decode(&mut buf);
+
+        if packet.is_some() {
+            src.advance(bytes_read);
+        }
+        Ok(packet)
     }
 }
