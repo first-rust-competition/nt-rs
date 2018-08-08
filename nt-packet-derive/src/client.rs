@@ -16,17 +16,30 @@ pub fn gen_client_packet_derive(input: DeriveInput) -> TokenStream {
                 let ident = field.ident.unwrap().clone();
                 let ty_name = util::parse_type(&field.ty).unwrap();
                 let fn_name = name_for_ty(&ty_name.to_string());
-                let part = if &ty_name.to_string() == "String" {
+                let part = if let Some(func) = fn_name {
                     quote! {
-                        ::leb128::write(buf, self.#ident.len() as u64);
-                        buf.put_slice(self.#ident.as_bytes());
+                        buf.#func(self.#ident);
                     }
                 }else {
-                    let fn_name = fn_name.unwrap();
                     quote! {
-                        buf.#fn_name(self.#ident);
+                        ::nt_packet::ClientMessage::encode(&self.#ident, buf);
                     }
                 };
+//                let part = if &ty_name.to_string() == "String" {
+//                    quote! {
+//                        ::leb128::write(buf, self.#ident.len() as u64);
+//                        buf.put_slice(self.#ident.as_bytes());
+//                    }
+//                }else {
+//                    match fn_name {
+//                        Some(func) => quote!(buf.#func(self.#ident);),
+//                        None => quote!(::nt_packet::io::Writable::write(&self.#ident, buf);),
+//                    }
+//                    let fn_name = fn_name.unwrap();
+//                    quote! {
+//                        buf.#fn_name(self.#ident);
+//                    }
+//                };
                 parts.push(part);
             }
         }

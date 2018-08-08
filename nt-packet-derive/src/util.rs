@@ -2,13 +2,14 @@ use proc_macro2::Span;
 use syn::{Ident, Type, PathSegment, Attribute, Meta, Lit};
 
 pub fn parse_type(ty: &Type) -> Option<Ident> {
-    if let &Type::Path(ref path) = ty {
-        let segment_name: &PathSegment = path.path.segments.iter().last().unwrap();
-        Some(segment_name.ident.clone())
-    }else {
-        None
-    }
+    match ty {
+        &Type::Path(ref path) => {
+            let segment_name: &PathSegment = path.path.segments.iter().last().unwrap();
+            Some(segment_name.ident.clone())
+        }
 
+        _ => None
+    }
 }
 
 pub fn parse_packet_id(attrs: Vec<Attribute>) -> Option<u8> {

@@ -4,7 +4,6 @@ use syn::{DeriveInput, DataStruct, Data, Fields, FieldsNamed, Ident};
 
 
 pub fn gen_server_packet_derive(input: DeriveInput) -> TokenStream {
-    let packet_id = util::parse_packet_id(input.attrs).unwrap();
     let struct_ident = input.ident;
 
     let mut parts = Vec::new();
@@ -16,19 +15,13 @@ pub fn gen_server_packet_derive(input: DeriveInput) -> TokenStream {
                 let ident = field.ident.unwrap().clone();
                 let ty_name = util::parse_type(&field.ty).unwrap();
                 let fn_name = name_for_ty(&ty_name.to_string());
-                let part = if &ty_name.to_string() == "String" {
+                let part = if let Some(func) = fn_name {
                     quote! {
-                        let #ident = {
-                            let len = ::leb128::read(buf) as usize;
-                            let mut strbuf = vec![0; len];
-                            buf.copy_to_slice(&mut strbuf[..]);
-                            ::std::string::String::from_utf8(strbuf).unwrap()
-                        };
+                        let #ident = buf.#func();
                     }
-                }else {
-                    let fn_name = fn_name.unwrap();
+                } else {
                     quote! {
-                        let #ident = buf.#fn_name();
+                        let #ident = <#ty_name as ::nt_packet::ServerMessage>::decode(buf).unwrap();
                     }
                 };
                 parts.push(part);
@@ -40,16 +33,12 @@ pub fn gen_server_packet_derive(input: DeriveInput) -> TokenStream {
     quote! {
         impl ::nt_packet::ServerMessage for #struct_ident {
             fn decode(buf: &mut ::bytes::Buf) -> Option<Self> {
-                if buf.get_u8() != #packet_id {
-                    None
-                } else {
-                    //TODO
-                    #(#parts)*
+                //TODO
+                #(#parts)*
 
-                    Some(#struct_ident {
-                        #(#idents,)*
-                    })
-                }
+                Some(#struct_ident {
+                    #(#idents,)*
+                })
             }
         }
     }
