@@ -1,4 +1,4 @@
-#![feature(attr_literals)]
+#![feature(attr_literals, nll)]
 
 extern crate futures;
 extern crate tokio;
@@ -14,6 +14,7 @@ pub const NT_PROTOCOL_REV: u16 = 0x0300;
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
 mod proto;
+mod nt;
 
 use proto::codec::NTCodec;
 use proto::client::*;
@@ -25,50 +26,15 @@ use futures::{Stream, Sink, Future};
 use futures::future::ok;
 use futures::future::Either;
 
+use std::sync::{Arc, Mutex};
+
+use nt::*;
+use nt::state::*;
+
 fn main() -> Result<()> {
-    let client = TcpStream::connect(&"127.0.0.1:1735".parse()?)
-        .and_then(|sock| {
-            let codec = NTCodec.framed(sock);
-            let hello = ClientHello::new(NT_PROTOCOL_REV, "nt-rs");
-            //TODO: State
-
-            let start = codec.send(Box::new(hello)).and_then(|codec| {
-                let (tx, rx) = codec.split();
-                let poll = rx
-                    .fold(tx, |tx, packet| {
-                        let resp = match packet {
-                            Packet::ServerHello(packet) => {
-                                println!("Got server hello: {:?}", packet);
-                                Either::B(ok(tx))
-                            }
-                            Packet::ServerHelloComplete(_) => {
-                                println!("Got server hello complete");
-                                println!("Sent ClientHelloComplete");
-                                Either::A(tx.send(Box::new(ClientHelloComplete)))
-                            }
-                            Packet::ProtocolVersionUnsupported(packet) => {
-                                println!("Got this {:?}", packet);
-                                Either::B(ok(tx))
-                            }
-                            Packet::EntryAssignment(ass /* heheheh */) => {
-                                println!("uuh {:?}", ass);
-                                Either::B(ok(tx))
-                            }
-                            _ => Either::B(ok(tx))
-                        };
-
-                        resp
-                    }).map_err(|e| println!("Got error {:?}", e))
-                    .map(|_| ());
-
-                tokio::spawn(poll);
-                Ok(())
-            }).then(|_| Ok(()));
-
-            tokio::spawn(start);
-            Ok(())
-        })
-        .map_err(|err| println!("Error = {:?}", err));
+    let mut state = Arc::new(Mutex::new(State::new()));
+    let client = NetworkTables::connect("nt-rs", &"127.0.0.1:1735".parse()?, state.clone())
+        .and_then(move |codec| tokio::spawn(poll(state.clone(), codec)));
 
     tokio::run(client);
 

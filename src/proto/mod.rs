@@ -46,6 +46,11 @@ pub fn try_decode(buf: &mut Buf) -> (Option<Packet>, usize) {
             bytes += bytes_read;
             Some(Packet::EntryAssignment(packet.unwrap()))
         }
+        0x13 => {
+            let (packet, bytes_read) = EntryDelete::decode(buf);
+            bytes += bytes_read;
+            Some(Packet::EntryDelete(packet.unwrap()))
+        }
         _ => None
     };
 
@@ -58,21 +63,28 @@ pub enum Packet {
     ServerHello(ServerHello),
     ServerHelloComplete(ServerHelloComplete),
     EntryAssignment(EntryAssignment),
+    EntryDelete(EntryDelete),
 }
 
 #[derive(Debug, ClientMessage, ServerMessage)]
 #[packet_id = 0x00]
 pub struct KeepAlive;
 
+#[derive(Debug, ClientMessage, ServerMessage)]
+#[packet_id = 0x13]
+pub struct EntryDelete {
+    pub entry_id: u16,
+}
+
 /// Packet ID 0x10 (Cannot derive due to non-deterministic nature of last field)
 #[derive(Debug)]
 pub struct EntryAssignment {
-    entry_name: String,
-    entry_type: EntryType,
-    entry_id: [u8; 2],
-    entry_sequence_num: [u8; 2],
-    entry_flags: u8,
-    entry_value: EntryValue,
+    pub entry_name: String,
+    pub entry_type: EntryType,
+    pub entry_id: u16,
+    pub entry_sequence_num: u16,
+    pub entry_flags: u8,
+    pub entry_value: EntryValue,
 }
 
 impl ServerMessage for EntryAssignment {
@@ -88,18 +100,10 @@ impl ServerMessage for EntryAssignment {
             bytes_read += bytes;
             et.unwrap()
         };
-        let entry_id = {
-            let mut entry_buf = [0u8; 2];
-            buf.copy_to_slice(&mut entry_buf[..]);
-            entry_buf
-        };
+        let entry_id = buf.get_u16_be();
         bytes_read += 2;
 
-        let entry_sequence_num = {
-            let mut entry_buf = [0u8; 2];
-            buf.copy_to_slice(&mut entry_buf[..]);
-            entry_buf
-        };
+        let entry_sequence_num = buf.get_u16_be();
         bytes_read += 2;
 
         let entry_flags = buf.get_u8();
