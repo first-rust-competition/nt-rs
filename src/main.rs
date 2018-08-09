@@ -16,15 +16,8 @@ pub type Result<T> = std::result::Result<T, failure::Error>;
 mod proto;
 mod nt;
 
-use proto::codec::NTCodec;
-use proto::client::*;
-use proto::Packet;
-
-use tokio::net::TcpStream;
-use tokio_codec::Decoder;
-use futures::{Stream, Sink, Future};
-use futures::future::ok;
-use futures::future::Either;
+use futures::{Future, Stream};
+use futures::sync::mpsc::channel;
 
 use std::sync::{Arc, Mutex};
 
@@ -33,11 +26,21 @@ use nt::state::*;
 
 fn main() -> Result<()> {
     // Core state of the application. Contains state of the connection, and entries gotten from the server
-    let mut state = Arc::new(Mutex::new(State::new()));
+    let state = Arc::new(Mutex::new(State::new()));
 
     // Open the initial connection. Once our first packet has been sent, spawn a new process to poll the receiver for any new data
+//    let client = NetworkTables::connect("nt-rs", &"127.0.0.1:1735".parse()?, state.clone())
+//        .and_then(move |codec| tokio::spawn(poll(state.clone(), codec)));
+
     let client = NetworkTables::connect("nt-rs", &"127.0.0.1:1735".parse()?, state.clone())
-        .and_then(move |codec| tokio::spawn(poll(state.clone(), codec)));
+        .and_then(move |codec| {
+            let (tx, rx) = codec.split();
+            let (chan_tx, chan_rx) = channel(5);
+
+            tokio::spawn(send_packets(tx, chan_rx));
+            tokio::spawn(poll_socket(state.clone(), rx, chan_tx.clone()));
+            tokio::spawn(poll_stdin(state.clone(), chan_tx.clone()))
+        });
 
     // Start the client, will block until the connection is closed.
     tokio::run(client);

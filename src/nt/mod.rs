@@ -1,31 +1,28 @@
 use std::net::SocketAddr;
 use futures::{Future, Poll};
 use futures::future::{ok, Either};
+use futures::sync::mpsc::{Sender, Receiver};
 use tokio::prelude::*;
 use tokio::net::TcpStream;
-use tokio_codec::{Decoder, Framed};
-use tokio::timer::Interval;
-use tokio;
+use tokio_codec::{Decoder, Framed, FramedRead, LinesCodec};
+use tokio::io::stdin;
 
-use std::time::{Instant, Duration};
-
+use nt_packet::ClientMessage;
 use proto::codec::NTCodec;
 use proto::client::*;
 use proto::*;
-use proto::server::*;
-use proto::types::*;
 
 use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
+use std::io::Error;
 
 pub mod state;
+mod handler;
 
+use self::handler::*;
 use state::*;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables {
-    /// Represents the current state of the connection
-    state: Arc<Mutex<State>>,
     /// Contains the initial connection future with a reference to the framed NT codec
     handle: Box<Future<Item=Framed<TcpStream, NTCodec>, Error=()> + Send>,
 }
@@ -57,52 +54,52 @@ impl NetworkTables {
             .map_err(|_| ());
 
         NetworkTables {
-            state,
             handle: Box::new(future),
         }
     }
 }
 
+pub fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>, rx: Receiver<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
+    rx
+        .map_err(|_| ())
+        .fold(tx, |tx, packet| tx.send(packet).map_err(|_| ()))
+        .then(|_| Ok(()))
+}
+
+pub fn poll_stdin(state: Arc<Mutex<State>>, tx: Sender<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
+    FramedRead::new(stdin(), LinesCodec::new())
+        .map_err(|_| ())
+        .fold(tx, move |tx, msg| {
+            match handle_user_input(msg, state.clone()) {
+                Some(packet) => Either::A(tx.send(packet).map_err(|_|())),
+                None => Either::B(ok(tx))
+            }
+        })
+        .then(|_| Ok(()))
+}
+
 /// Function containing the future for polling the remote peer for new packets
 /// Expects to be started with `tokio::spawn`
 /// Mutates the `state` as packets are received
-pub fn poll(state: Arc<Mutex<State>>, codec: Framed<TcpStream, NTCodec>) -> impl Future<Item=(), Error=()> {
-    let (tx, rx) = codec.split();
+pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=Error>, tx: Sender<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
+
     // This function will be called as new packets arrive. Has to be `fold` to maintain ownership over the write half of our codec
-    rx.fold(tx, move |tx, packet| {
-        // Perform certain actions based on the internal packet that was decoded.
-        // A value of Either::B() represents something where no packet was sent in response
-        // A value of Either::A() represents something where a packet had to be sent
-        match packet {
-            Packet::ServerHello(packet) => {
-                println!("Got server hello: {:?}", packet);
-                Either::B(ok(tx))
+    rx
+        .map_err(|_| ())
+        .fold(tx, move |tx, packet| {
+            match handle_packet(packet, state.clone()) {
+                Some(packet) => Either::A(tx.send(packet).map_err(|_|())),
+                None => Either::B(ok(tx))
             }
-            Packet::ServerHelloComplete(_) => {
-                println!("Got server hello complete");
-                state.lock().unwrap().set_state(ConnectionState::Connected);
-                println!("Sent ClientHelloComplete");
-                Either::A(tx.send(Box::new(ClientHelloComplete)))
-            }
-            Packet::ProtocolVersionUnsupported(packet) => {
-                println!("Got this {:?}", packet);
-                Either::B(ok(tx))
-            }
-            Packet::EntryAssignment(entry /* heheheh */) => {
-                let mut state = state.lock().unwrap();
-                state.add_entry(entry.entry_id, entry.entry_value);
+        })
+        .then(|_| Ok(()))
+}
 
-                Either::B(ok(tx))
-            }
-            Packet::EntryDelete(delet) => {
-                let mut state = state.lock().unwrap();
-                state.remove_entry(delet.entry_id);
-
-                Either::B(ok(tx))
-            }
-            _ => Either::B(ok(tx))
-        }
-    })
-        .map_err(|e| println!("Got error {:?}", e))
-        .map(|_| ())
+fn handle_user_input(user_in: String, state: Arc<Mutex<State>>) -> Option<Box<ClientMessage>> {
+    println!("Got input {}", user_in);
+    if user_in.starts_with("add ") {
+        let arg = &user_in[4..];
+        println!("{}", arg);
+    }
+    None
 }
