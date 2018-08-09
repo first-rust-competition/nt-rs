@@ -8,6 +8,8 @@ use std::io::Error;
 
 use super::try_decode;
 
+/// Codec for the NetworkTables protocol
+/// Built on `ClientMessage` for outgoing packets, and `ServerMessage` for incoming packets.
 pub struct NTCodec;
 
 impl Encoder for NTCodec {
@@ -28,9 +30,11 @@ impl Decoder for NTCodec {
         let mut buf = src.clone().freeze().into_buf();
         let (packet, bytes_read) = try_decode(&mut buf);
 
+        // This makes sure that a value was actually read successfully from the buffer, so that advancing the cursor is fine
         if packet.is_some() {
             src.advance(bytes_read);
         }
+
         Ok(packet)
     }
 }

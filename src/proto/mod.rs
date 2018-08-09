@@ -9,6 +9,7 @@ use bytes::Buf;
 use nt_packet::ServerMessage;
 use self::server::*;
 
+/// Represents an attempt to decode a `ServerMessage` from the given `buf`
 pub fn try_decode(buf: &mut Buf) -> (Option<Packet>, usize) {
     use self::server::*;
     // Safety net to not read if there's nothing there
@@ -18,6 +19,8 @@ pub fn try_decode(buf: &mut Buf) -> (Option<Packet>, usize) {
 
     let id = buf.get_u8();
 
+    // The total bytes read, will differ with the different types of packets that are read.
+    // Updated appropriately in the `match` so that the caller can update the byte source accordingly
     let mut bytes = 1;
 
     let packet = match id {
@@ -57,6 +60,7 @@ pub fn try_decode(buf: &mut Buf) -> (Option<Packet>, usize) {
     (packet, bytes)
 }
 
+/// Enum wrapping `ServerMessage` types
 pub enum Packet {
     KeepAlive(KeepAlive),
     ProtocolVersionUnsupported(ProtocolVersionUnsupported),
@@ -66,17 +70,23 @@ pub enum Packet {
     EntryDelete(EntryDelete),
 }
 
+/// Represents NT Packet 0x00 Keep Alive
+/// Sent by the client to ensure that a connection is still valid
 #[derive(Debug, ClientMessage, ServerMessage)]
 #[packet_id = 0x00]
 pub struct KeepAlive;
 
+/// Represents NT packet 0x13 Entry Delete
+/// Sent by a server when a peer has deleted a value with id `entry_id`
+/// Sent by a client to update the server to delete a value with id `entry_id`
 #[derive(Debug, ClientMessage, ServerMessage)]
 #[packet_id = 0x13]
 pub struct EntryDelete {
     pub entry_id: u16,
 }
 
-/// Packet ID 0x10 (Cannot derive due to non-deterministic nature of last field)
+/// Represents NT packet 0x10 Entry Assignment
+/// Due to the non-deterministic nature of decoding `EntryValue`, manual implementation was required
 #[derive(Debug)]
 pub struct EntryAssignment {
     pub entry_name: String,
@@ -89,17 +99,21 @@ pub struct EntryAssignment {
 
 impl ServerMessage for EntryAssignment {
     fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
+        // Tally of the total bytes read from `buf` to decode this packet
         let mut bytes_read = 0;
+
         let entry_name = {
             let (s, bytes) = String::decode(buf);
             bytes_read += bytes;
             s.unwrap()
         };
+
         let entry_type = {
             let (et, bytes) = EntryType::decode(buf);
             bytes_read += bytes;
             et.unwrap()
         };
+
         let entry_id = buf.get_u16_be();
         bytes_read += 2;
 
@@ -108,6 +122,7 @@ impl ServerMessage for EntryAssignment {
 
         let entry_flags = buf.get_u8();
         bytes_read += 1;
+
         let (entry_value, bytes) = entry_type.get_entry(buf);
         bytes_read += bytes;
 
