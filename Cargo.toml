@@ -1,5 +1,5 @@
 [package]
-name = "nt-rs"
+name = "nt"
 version = "0.1.0"
 authors = ["Redrield <redrield@gmail.com>"]
 
