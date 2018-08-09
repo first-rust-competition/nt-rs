@@ -5,8 +5,8 @@ pub mod codec;
 
 use self::types::*;
 
-use bytes::Buf;
-use nt_packet::ServerMessage;
+use bytes::{Buf, BufMut, BytesMut};
+use nt_packet::*;
 use self::server::*;
 
 /// Represents an attempt to decode a `ServerMessage` from the given `buf`
@@ -87,7 +87,8 @@ pub struct EntryDelete {
 
 /// Represents NT packet 0x10 Entry Assignment
 /// Due to the non-deterministic nature of decoding `EntryValue`, manual implementation was required
-#[derive(Debug)]
+#[derive(Debug, ClientMessage)]
+#[packet_id = 0x10]
 pub struct EntryAssignment {
     pub entry_name: String,
     pub entry_type: EntryType,
@@ -95,6 +96,19 @@ pub struct EntryAssignment {
     pub entry_sequence_num: u16,
     pub entry_flags: u8,
     pub entry_value: EntryValue,
+}
+
+impl EntryAssignment {
+    pub fn new(name: &str, ty: EntryType, id: u16, sequence_num: u16, flags: u8, value: EntryValue) -> EntryAssignment {
+        EntryAssignment {
+            entry_name: name.to_string(),
+            entry_type: ty,
+            entry_id: id,
+            entry_sequence_num: sequence_num,
+            entry_flags: flags,
+            entry_value: value
+        }
+    }
 }
 
 impl ServerMessage for EntryAssignment {

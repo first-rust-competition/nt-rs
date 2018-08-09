@@ -95,11 +95,4 @@ pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=
         .then(|_| Ok(()))
 }
 
-fn handle_user_input(user_in: String, state: Arc<Mutex<State>>) -> Option<Box<ClientMessage>> {
-    println!("Got input {}", user_in);
-    if user_in.starts_with("add ") {
-        let arg = &user_in[4..];
-        println!("{}", arg);
-    }
-    None
-}
+

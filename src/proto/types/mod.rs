@@ -1,6 +1,6 @@
-use nt_packet::ServerMessage;
-use bytes::Buf;
 use self::rpc::RPCDefinitionData;
+use nt_packet::*;
+use bytes::{Buf, BufMut, BytesMut};
 
 mod rpc;
 mod leb128;
@@ -28,6 +28,23 @@ pub enum EntryValue {
     DoubleArray(Vec<f64>),
     StringArray(Vec<String>),
     RPCDef(RPCDefinitionData),
+}
+
+impl ClientMessage for EntryType {
+    fn encode(&self, buf: &mut BytesMut) {
+        let byte = match self {
+            &EntryType::Boolean => 0x00,
+            &EntryType::Double => 0x01,
+            &EntryType::String => 0x02,
+            &EntryType::RawData => 0x03,
+            &EntryType::BooleanArray => 0x10,
+            &EntryType::DoubleArray => 0x11,
+            &EntryType::StringArray => 0x12,
+            _ => panic!()
+        };
+
+        buf.put_u8(byte);
+    }
 }
 
 impl ServerMessage for EntryType {
@@ -110,6 +127,42 @@ impl EntryType {
                 let (def, bytes) = RPCDefinitionData::decode(buf);
                 (EntryValue::RPCDef(def.unwrap()), bytes)
             }
+        }
+    }
+}
+
+impl ClientMessage for EntryValue {
+    fn encode(&self, buf: &mut BytesMut) {
+        match &self {
+            &EntryValue::Boolean(val) => buf.put_u8(*val as u8),
+            &EntryValue::Double(val) => buf.put_f64_be(*val),
+            &EntryValue::String(val) => val.encode(buf),
+            &EntryValue::RawData(val) => {
+                leb128::write(buf, val.len() as u64);
+                buf.put_slice(&val[..]);
+            }
+            &EntryValue::BooleanArray(val) => {
+                leb128::write(buf, val.len() as u64);
+
+                for b in val {
+                    buf.put_u8(*b as u8)
+                }
+            }
+            &EntryValue::DoubleArray(val) => {
+                leb128::write(buf, val.len() as u64);
+
+                for d in val {
+                    buf.put_f64_be(*d);
+                }
+            }
+            &EntryValue::StringArray(val) => {
+                leb128::write(buf, val.len() as u64);
+
+                for s in val {
+                    s.encode(buf);
+                }
+            }
+            _ => panic!()
         }
     }
 }

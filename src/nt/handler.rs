@@ -4,6 +4,8 @@ use nt::state::*;
 use nt_packet::ClientMessage;
 use proto::Packet;
 use proto::client::*;
+use proto::*;
+use proto::types::*;
 
 pub fn handle_packet(packet: Packet, state: Arc<Mutex<State>>) -> Option<Box<ClientMessage>> {
     match packet {
@@ -36,4 +38,23 @@ pub fn handle_packet(packet: Packet, state: Arc<Mutex<State>>) -> Option<Box<Cli
         }
         _ => None
     }
+}
+
+
+pub fn handle_user_input(user_in: String, state: Arc<Mutex<State>>) -> Option<Box<ClientMessage>> {
+    println!("Got input {}", user_in);
+    if user_in.starts_with("add ") {
+        let arg = &user_in[4..];
+        return Some(Box::new(
+            EntryAssignment::new(
+                "userInField",
+                EntryType::String,
+                0xFFFF,
+                0,
+                0,
+                EntryValue::String(arg.to_string())
+            )
+        ));
+    }
+    None
 }
