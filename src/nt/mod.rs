@@ -51,7 +51,7 @@ impl NetworkTables {
                 let codec = NTCodec.framed(sock);
                 codec.send(Box::new(ClientHello::new(::NT_PROTOCOL_REV, client_name)))
             })
-            .map_err(|_| ());
+            .map_err(drop);
 
         NetworkTables {
             handle: Box::new(future),
@@ -60,18 +60,22 @@ impl NetworkTables {
 }
 
 pub fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>, rx: Receiver<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
+    info!("Spawned packet send loop");
     rx
         .map_err(|_| ())
         .fold(tx, |tx, packet| tx.send(packet).map_err(|_| ()))
         .then(|_| Ok(()))
 }
 
+/// Function containing the future for reading user input from stdin and sending a packet if necessary
 pub fn poll_stdin(state: Arc<Mutex<State>>, tx: Sender<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
+    info!("Spawned stdin poll");
+
     FramedRead::new(stdin(), LinesCodec::new())
-        .map_err(|_| ())
+        .map_err(drop)
         .fold(tx, move |tx, msg| {
             match handle_user_input(msg, state.clone()) {
-                Some(packet) => Either::A(tx.send(packet).map_err(|_|())),
+                Some(packet) => Either::A(tx.send(packet).map_err(drop)),
                 None => Either::B(ok(tx))
             }
         })
@@ -82,13 +86,14 @@ pub fn poll_stdin(state: Arc<Mutex<State>>, tx: Sender<Box<ClientMessage>>) -> i
 /// Expects to be started with `tokio::spawn`
 /// Mutates the `state` as packets are received
 pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=Error>, tx: Sender<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
+    info!("Spawned socket poll");
 
     // This function will be called as new packets arrive. Has to be `fold` to maintain ownership over the write half of our codec
     rx
-        .map_err(|_| ())
+        .map_err(drop)
         .fold(tx, move |tx, packet| {
-            match handle_packet(packet, state.clone()) {
-                Some(packet) => Either::A(tx.send(packet).map_err(|_|())),
+            match handle_packet(packet, state.clone(), tx.clone()) {
+                Some(packet) => Either::A(tx.send(packet).map_err(drop)),
                 None => Either::B(ok(tx))
             }
         })
