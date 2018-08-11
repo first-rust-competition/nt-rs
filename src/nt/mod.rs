@@ -1,61 +1,74 @@
 use std::net::SocketAddr;
 use futures::{Future, Poll};
 use futures::future::{ok, Either};
-use futures::sync::mpsc::{Sender, Receiver};
+use futures::sync::mpsc::{Sender, Receiver, channel};
 use tokio::prelude::*;
 use tokio::net::TcpStream;
 use tokio_codec::{Decoder, Framed, FramedRead, LinesCodec};
 use tokio::io::stdin;
+use tokio;
+use tokio_core::reactor::Core;
 
 use nt_packet::ClientMessage;
 use proto::codec::NTCodec;
 use proto::client::*;
 use proto::*;
+use proto::types::*;
 
 use std::sync::{Arc, Mutex};
 use std::io::Error;
+use std::collections::HashMap;
+use std::thread;
 
 pub mod state;
+mod conn;
 mod handler;
 
 use self::handler::*;
-use state::*;
+use self::state::*;
+use self::conn::Connection;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables {
     /// Contains the initial connection future with a reference to the framed NT codec
-    handle: Box<Future<Item=Framed<TcpStream, NTCodec>, Error=()> + Send>,
-}
-
-/// Implementation of Future delegating to `self.handle`
-impl Future for NetworkTables {
-    type Item = Framed<TcpStream, NTCodec>;
-    type Error = ();
-
-    fn poll(&mut self) -> Poll<Framed<TcpStream, NTCodec>, ()> {
-        self.handle.poll()
-    }
+    state: Arc<Mutex<State>>,
 }
 
 impl NetworkTables {
     /// Performs the initial connection process to the given `target`.
     /// Assumes that target is a valid, running NetworkTables server.
-    /// Returns a `NetworkTables` ready to be started on the tokio runtime to initialize the connection
-    pub fn connect(client_name: &'static str, target: &SocketAddr, state: Arc<Mutex<State>>) -> NetworkTables {
-        state.lock().unwrap().set_state(ConnectionState::Connecting);
+    /// Returns a `NetworkTables`. The state of the connection can be told by the contained `State`
+    pub fn connect(client_name: &'static str, target: SocketAddr) -> NetworkTables {
+        let state = Arc::new(Mutex::new(State::new()));
+        state.lock().unwrap().set_connection_state(ConnectionState::Connecting);
 
-        // Internal handle of the struct
-        let future = TcpStream::connect(target)
-            .and_then(move |sock| {
-                // Once we have the socket, frame it with the NT codec and send the first packet to begin the connection
-                let codec = NTCodec.framed(sock);
-                codec.send(Box::new(ClientHello::new(::NT_PROTOCOL_REV, client_name)))
-            })
-            .map_err(drop);
+        let thread_state = state.clone();
+        let _ = thread::spawn(move || {
+            let mut core = Core::new().unwrap();
+            let handle = core.handle();
+            let state = thread_state;
+            {
+                state.clone().lock().unwrap().set_handle(handle.clone().remote().clone());
+            }
+
+            core.run(Connection::new(&handle, &target, client_name, state)).unwrap()
+        });
 
         NetworkTables {
-            handle: Box::new(future),
+            state,
         }
+    }
+
+    pub fn state(&self) -> &Arc<Mutex<State>> {
+        &self.state
+    }
+
+    pub fn create_entry(&mut self, data: EntryData) {
+        self.state.lock().unwrap().create_entry(data);
+    }
+
+    pub fn connected(&self) -> bool {
+        self.state.lock().unwrap().connection_state().connected()
     }
 }
 
@@ -64,21 +77,6 @@ pub fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>,
     rx
         .map_err(|_| ())
         .fold(tx, |tx, packet| tx.send(packet).map_err(|_| ()))
-        .then(|_| Ok(()))
-}
-
-/// Function containing the future for reading user input from stdin and sending a packet if necessary
-pub fn poll_stdin(state: Arc<Mutex<State>>, tx: Sender<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
-    info!("Spawned stdin poll");
-
-    FramedRead::new(stdin(), LinesCodec::new())
-        .map_err(drop)
-        .fold(tx, move |tx, msg| {
-            match handle_user_input(msg, state.clone()) {
-                Some(packet) => Either::A(tx.send(packet).map_err(drop)),
-                None => Either::B(ok(tx))
-            }
-        })
         .then(|_| Ok(()))
 }
 

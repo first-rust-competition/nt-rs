@@ -17,7 +17,7 @@ pub fn handle_packet(packet: Packet, state: Arc<Mutex<State>>, tx: Sender<Box<Cl
         }
         Packet::ServerHelloComplete(_) => {
             debug!("Got server hello complete");
-            state.lock().unwrap().set_state(ConnectionState::Connected(tx));
+            state.lock().unwrap().set_connection_state(ConnectionState::Connected(tx));
             debug!("Sent ClientHelloComplete");
             Some(Box::new(ClientHelloComplete))
         }
@@ -28,7 +28,7 @@ pub fn handle_packet(packet: Packet, state: Arc<Mutex<State>>, tx: Sender<Box<Cl
         }
         Packet::EntryAssignment(entry /* heheheh */) => {
             let mut state = state.lock().unwrap();
-            state.add_entry(entry.entry_id, entry.entry_value);
+            state.add_entry(entry);
 
             None
         }
@@ -40,23 +40,4 @@ pub fn handle_packet(packet: Packet, state: Arc<Mutex<State>>, tx: Sender<Box<Cl
         }
         _ => None
     }
-}
-
-
-pub fn handle_user_input(user_in: String, state: Arc<Mutex<State>>) -> Option<Box<ClientMessage>> {
-    debug!("Got input {}", user_in);
-    if user_in.starts_with("add ") {
-        let arg = &user_in[4..];
-        return Some(Box::new(
-            EntryAssignment::new(
-                "userInField",
-                EntryType::String,
-                0xFFFF,
-                0,
-                0,
-                EntryValue::String(arg.to_string())
-            )
-        ));
-    }
-    None
 }

@@ -2,9 +2,26 @@ use self::rpc::RPCDefinitionData;
 use nt_packet::*;
 use bytes::{Buf, BufMut, BytesMut};
 
+use std::convert::AsRef;
+
 mod rpc;
 mod leb128;
 
+pub struct EntryData {
+    pub name: String,
+    pub flags: u8,
+    pub value: EntryValue
+}
+
+impl EntryData {
+    pub fn new(name: String, flags: u8, value: EntryValue) -> EntryData {
+        EntryData {
+            name,
+            flags,
+            value
+        }
+    }
+}
 
 #[derive(Debug)]
 pub enum EntryType {
@@ -163,6 +180,35 @@ impl ClientMessage for EntryValue {
                 }
             }
             _ => panic!()
+        }
+    }
+}
+
+impl EntryValue {
+    pub fn entry_type(&self) -> EntryType {
+        match self {
+            EntryValue::Boolean(_) => EntryType::Boolean,
+            EntryValue::Double(_) => EntryType::Double,
+            EntryValue::String(_) => EntryType::String,
+            EntryValue::RawData(_) => EntryType::RawData,
+            EntryValue::BooleanArray(_) => EntryType::BooleanArray,
+            EntryValue::DoubleArray(_) => EntryType::DoubleArray,
+            EntryValue::StringArray(_) => EntryType::StringArray,
+            EntryValue::RPCDef(_) => EntryType::RPCDef
+        }
+    }
+}
+
+impl<T> From<T> for EntryType
+    where T: AsRef<str>
+{
+    fn from(val: T) -> Self {
+        info!("{}", val.as_ref());
+        match val.as_ref().to_lowercase().as_str() {
+            "string" => EntryType::String,
+            "bool" => EntryType::Boolean,
+            "double" => EntryType::Double,
+            _ => unimplemented!()
         }
     }
 }
