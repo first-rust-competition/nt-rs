@@ -15,6 +15,7 @@ use nt::NetworkTables;
 use std::io;
 
 mod input;
+
 use input::Message;
 
 fn main() -> Result<()> {
@@ -22,16 +23,8 @@ fn main() -> Result<()> {
 
     let mut client = NetworkTables::connect("nt-test", "127.0.0.1:1735".parse()?);
 
-    while client.connected() {
-
-        let mut s = String::new();
-        io::stdin().read_line(&mut s);
-
-        if let Some(msg) = input::parse_message(s) {
-            match msg {
-                Message::Add(dat) => client.create_entry(dat),
-            }
-        }
+    for (id, data) in client.entries() {
+        info!("{} to {:?}", id, data);
     }
     Ok(())
 }
@@ -47,7 +40,7 @@ fn setup_logger() -> Result<()> {
                 msg
             ))
         })
-        .level(log::LevelFilter::Debug)
+        .level(log::LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()?;
     Ok(())

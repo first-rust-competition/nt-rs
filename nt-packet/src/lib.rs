@@ -1,15 +1,16 @@
 extern crate bytes;
+extern crate leb128;
 
 use bytes::{Buf, BytesMut, BufMut};
 
-mod leb128;
+use leb128::write::LEB128Write;
+use leb128::read::LEB128Read;
 
 /// Trait representing an NT message/packet headed Client --> Server
 pub trait ClientMessage: Send {
     /// Encodes `Self` into the given `buf`
     fn encode(&self, buf: &mut BytesMut);
 }
-
 
 /// Trait representing an NT message/packet headed Server --> Client
 pub trait ServerMessage {
@@ -22,16 +23,17 @@ pub trait ServerMessage {
 
 impl ClientMessage for String {
     fn encode(&self, buf: &mut BytesMut) {
-        ::leb128::write(buf, self.len() as u64);
+        buf.write_unsigned(self.len() as u64).unwrap();
         buf.put_slice(self.as_bytes());
     }
 }
 
 impl ServerMessage for String {
-    fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
-        let len = ::leb128::read(buf) as usize;
+    fn decode(mut buf: &mut Buf) -> (Option<Self>, usize) {
+        let (len, bytes_read) = buf.read_unsigned().unwrap();
+        let len = len as usize;
         let mut strbuf = vec![0; len];
         buf.copy_to_slice(&mut strbuf[..]);
-        (Some(::std::string::String::from_utf8(strbuf).unwrap()), len + 1)
+        (Some(::std::string::String::from_utf8(strbuf).unwrap()), len + bytes_read)
     }
 }

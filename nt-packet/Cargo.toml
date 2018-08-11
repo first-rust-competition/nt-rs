@@ -5,3 +5,9 @@ authors = ["Redrield <redrield@gmail.com>"]
 
 [dependencies]
 bytes = "0.4.9"
+
+[dependencies.leb128]
+git = "https://github.com/Redrield/leb128"
+rev = "f0a9c2e"
+default-features = false
+features = ["use-bytes"]

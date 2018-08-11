@@ -1,12 +1,13 @@
 use self::rpc::RPCDefinitionData;
 use nt_packet::*;
 use bytes::{Buf, BufMut, BytesMut};
+use leb128::{LEB128Read, LEB128Write};
 
 use std::convert::AsRef;
 
-mod rpc;
-mod leb128;
+pub mod rpc;
 
+#[derive(Clone, Debug)]
 pub struct EntryData {
     pub name: String,
     pub flags: u8,
@@ -23,7 +24,7 @@ impl EntryData {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum EntryType {
     Boolean,
     Double,
@@ -35,7 +36,7 @@ pub enum EntryType {
     RPCDef,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EntryValue {
     Boolean(bool),
     Double(f64),
@@ -83,7 +84,7 @@ impl ServerMessage for EntryType {
 }
 
 impl EntryType {
-    pub fn get_entry(&self, buf: &mut Buf) -> (EntryValue, usize) {
+    pub fn get_entry(&self, mut buf: &mut Buf) -> (EntryValue, usize) {
         match self {
             &EntryType::Boolean => (EntryValue::Boolean(buf.get_u8() == 1), 1),
             &EntryType::Double => (EntryValue::Double(buf.get_f64_be()), 8),
@@ -92,10 +93,11 @@ impl EntryType {
                 (EntryValue::String(value.unwrap()), bytes_read)
             }
             &EntryType::RawData => {
-                let len = leb128::read(buf) as usize;
+                let (len, size) = buf.read_unsigned().unwrap();
+                let len = len as usize;
                 let mut data = vec![0u8; len];
                 buf.copy_to_slice(&mut data[..]);
-                (EntryValue::RawData(data), len + 1)
+                (EntryValue::RawData(data), len + size)
             }
             &EntryType::BooleanArray => {
                 let mut bytes_read = 0;
@@ -155,25 +157,25 @@ impl ClientMessage for EntryValue {
             &EntryValue::Double(val) => buf.put_f64_be(*val),
             &EntryValue::String(val) => val.encode(buf),
             &EntryValue::RawData(val) => {
-                leb128::write(buf, val.len() as u64);
+                buf.write_unsigned(val.len() as u64).unwrap();
                 buf.put_slice(&val[..]);
             }
             &EntryValue::BooleanArray(val) => {
-                leb128::write(buf, val.len() as u64);
+                buf.write_unsigned(val.len() as u64).unwrap();
 
                 for b in val {
                     buf.put_u8(*b as u8)
                 }
             }
             &EntryValue::DoubleArray(val) => {
-                leb128::write(buf, val.len() as u64);
+                buf.write_unsigned(val.len() as u64).unwrap();
 
                 for d in val {
                     buf.put_f64_be(*d);
                 }
             }
             &EntryValue::StringArray(val) => {
-                leb128::write(buf, val.len() as u64);
+                buf.write_unsigned(val.len() as u64).unwrap();
 
                 for s in val {
                     s.encode(buf);

@@ -1,6 +1,8 @@
 use super::*;
 
-#[derive(Debug)]
+use bytes::{BytesMut, BufMut};
+
+#[derive(Debug, Clone)]
 pub struct RPCDefinitionData {
     version: u8,
     procedure_name: String,
@@ -8,7 +10,7 @@ pub struct RPCDefinitionData {
     parameters: Vec<Parameter>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Parameter {
     parameter_type: EntryType,
     parameter_name: String,
@@ -17,7 +19,7 @@ pub struct Parameter {
     results: Vec<Result>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Result {
     result_type: EntryType,
     result_name: String,
@@ -29,6 +31,26 @@ impl ServerMessage for Result {
         let (result_name, name_bytes_read) = String::decode(buf);
 
         (Some(Result { result_type: result_type.unwrap(), result_name: result_name.unwrap() }), bytes_read + name_bytes_read)
+    }
+}
+
+impl ClientMessage for Result {
+    fn encode(&self, buf: &mut BytesMut) {
+        self.result_type.encode(buf);
+        self.result_name.encode(buf);
+    }
+}
+
+impl ClientMessage for Parameter {
+    fn encode(&self, buf: &mut BytesMut) {
+        self.parameter_type.encode(buf);
+        self.parameter_name.encode(buf);
+        self.parameter_default.encode(buf);
+        buf.put_u8(self.result_size as u8);
+
+        for res in &self.results {
+            res.encode(buf);
+        }
     }
 }
 

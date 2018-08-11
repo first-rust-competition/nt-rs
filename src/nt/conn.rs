@@ -1,8 +1,7 @@
-use tokio_codec::Framed;
 use tokio::net::TcpStream;
-use futures::{Future, Poll, Stream, Sink, Async};
+use futures::{Future, Poll, Stream, Sink};
 use futures::sync::mpsc::channel;
-use tokio;
+use futures::sync::oneshot::Sender as OneshotSender;
 use tokio_core::reactor::Handle;
 use tokio_codec::Decoder;
 
@@ -24,18 +23,18 @@ impl Future for Connection {
 
     fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
         self.future.poll()
-//        Ok(Async::NotReady)
     }
 }
 
 impl Connection {
-    pub fn new(handle: &Handle, target: &SocketAddr, client_name: &'static str, state: Arc<Mutex<State>>) -> Connection {
+    pub fn new(handle: &Handle, target: &SocketAddr, client_name: &'static str, state: Arc<Mutex<State>>, sender: OneshotSender<()>) -> Connection {
         let handle = handle.clone().remote().clone();
         let end_state = state.clone();
         let err_state = state.clone();
+        let codec_state = state.clone();
         let future = TcpStream::connect(target)
             .and_then(move |sock| {
-                let codec = NTCodec.framed(sock);
+                let codec = NTCodec::new(codec_state.clone()).framed(sock);
                 codec.send(Box::new(ClientHello::new(::NT_PROTOCOL_REV, client_name)))
             })
             .map_err(move |e| {
@@ -44,9 +43,11 @@ impl Connection {
                 debug!("{:?}", err_state.lock().unwrap().connection_state())
             })
             .and_then(move |codec| {
-                info!("Connected, spawning tasks");
+                debug!("Connected, spawning tasks");
                 let (tx, rx) = codec.split();
                 let (chan_tx, chan_rx) = channel(5);
+
+                sender.send(()).unwrap();
 
                 handle.spawn(|_| send_packets(tx, chan_rx));
                 poll_socket(state.clone(), rx, chan_tx.clone())

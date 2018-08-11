@@ -1,24 +1,19 @@
 use std::net::SocketAddr;
-use futures::{Future, Poll};
+use futures::Future;
 use futures::future::{ok, Either};
-use futures::sync::mpsc::{Sender, Receiver, channel};
+use futures::sync::mpsc::{Sender, Receiver};
+use futures::sync::oneshot::{channel, Sender as OneshotSender};
 use tokio::prelude::*;
-use tokio::net::TcpStream;
-use tokio_codec::{Decoder, Framed, FramedRead, LinesCodec};
-use tokio::io::stdin;
-use tokio;
 use tokio_core::reactor::Core;
 
 use nt_packet::ClientMessage;
-use proto::codec::NTCodec;
-use proto::client::*;
 use proto::*;
 use proto::types::*;
 
 use std::sync::{Arc, Mutex};
 use std::io::Error;
-use std::collections::HashMap;
 use std::thread;
+use std::collections::HashMap;
 
 pub mod state;
 mod conn;
@@ -41,6 +36,7 @@ impl NetworkTables {
     pub fn connect(client_name: &'static str, target: SocketAddr) -> NetworkTables {
         let state = Arc::new(Mutex::new(State::new()));
         state.lock().unwrap().set_connection_state(ConnectionState::Connecting);
+        let (tx, rx) = channel();
 
         let thread_state = state.clone();
         let _ = thread::spawn(move || {
@@ -48,23 +44,52 @@ impl NetworkTables {
             let handle = core.handle();
             let state = thread_state;
             {
-                state.clone().lock().unwrap().set_handle(handle.clone().remote().clone());
+                state.lock().unwrap().set_handle(handle.clone().remote().clone());
             }
 
-            core.run(Connection::new(&handle, &target, client_name, state)).unwrap()
+            core.run(Connection::new(&handle, &target, client_name, state, tx)).unwrap()
         });
+
+        rx.wait().unwrap();
+
+        {
+            while state.lock().unwrap().connection_state().connecting() {
+
+            }
+        }
 
         NetworkTables {
             state,
         }
     }
 
-    pub fn state(&self) -> &Arc<Mutex<State>> {
-        &self.state
+    pub fn entries(&self) -> HashMap<u16, EntryData> {
+        self.state.lock().unwrap().entries()
+    }
+
+    pub fn get_entry(&self, id: u16) -> EntryData {
+        let state = self.state.lock().unwrap().clone();
+        state.get_entry(id).clone()
     }
 
     pub fn create_entry(&mut self, data: EntryData) {
         self.state.lock().unwrap().create_entry(data);
+    }
+
+    pub fn delete_entry(&mut self, id: u16) {
+        self.state.lock().unwrap().delete_entry(id);
+    }
+
+    pub fn delete_all_entries(&mut self) {
+        self.state.lock().unwrap().delete_all_entries();
+    }
+
+    pub fn update_entry(&mut self, id: u16, new_value: EntryValue) {
+        self.state.lock().unwrap().update_entry(id, new_value);
+    }
+
+    pub fn update_entry_flags(&mut self, id: u16, flags: u8) {
+        self.state.lock().unwrap().update_entry_flags(id, flags);
     }
 
     pub fn connected(&self) -> bool {
@@ -73,7 +98,7 @@ impl NetworkTables {
 }
 
 pub fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>, rx: Receiver<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
-    info!("Spawned packet send loop");
+    debug!("Spawned packet send loop");
     rx
         .map_err(|_| ())
         .fold(tx, |tx, packet| tx.send(packet).map_err(|_| ()))
@@ -84,7 +109,7 @@ pub fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>,
 /// Expects to be started with `tokio::spawn`
 /// Mutates the `state` as packets are received
 pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=Error>, tx: Sender<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
-    info!("Spawned socket poll");
+    debug!("Spawned socket poll");
 
     // This function will be called as new packets arrive. Has to be `fold` to maintain ownership over the write half of our codec
     rx

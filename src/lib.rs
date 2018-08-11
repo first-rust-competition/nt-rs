@@ -11,6 +11,9 @@ extern crate nt_packet_derive;
 extern crate failure;
 #[macro_use]
 extern crate log;
+extern crate leb128;
+#[macro_use]
+extern crate derive_new;
 
 pub const NT_PROTOCOL_REV: u16 = 0x0300;
 

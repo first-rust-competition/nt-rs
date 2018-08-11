@@ -13,3 +13,10 @@ tokio-codec = "0.1.0"
 futures = "0.1.23"
 log = "0.4.3"
 tokio-core = "0.1.17"
+derive-new = "0.5.5"
+
+[dependencies.leb128]
+git = "https://github.com/Redrield/leb128"
+rev = "f0a9c2e"
+default-features = false
+features = ["use-bytes"]

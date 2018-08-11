@@ -1,18 +1,17 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 use proto::types::{EntryData, EntryValue};
-use proto::{KeepAlive, EntryAssignment, EntryDelete};
+use proto::*;
 use nt_packet::ClientMessage;
 
 use futures::{Stream, Sink, Future};
 use futures::future::ok;
 use futures::sync::mpsc::Sender;
 use tokio::timer::Interval;
-use tokio;
-use tokio::executor::{DefaultExecutor, Executor};
 use tokio_core::reactor::Remote;
 
 /// Enum representing what part of the connection the given `State` is currently in
+#[derive(Clone)]
 pub enum ConnectionState {
     /// Represents a `State` that is not currently connected, or attempting to connect to a NetworkTables server
     Idle,
@@ -37,14 +36,22 @@ impl Debug for ConnectionState {
 impl ConnectionState {
     pub fn connected(&self) -> bool {
         match self {
-            &ConnectionState::Idle => false,
-            _ => true,
+            &ConnectionState::Connected(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn connecting(&self) -> bool {
+        match self {
+            &ConnectionState::Connecting => true,
+            _ => false,
         }
     }
 }
 
 /// Struct containing the state of a connection
 /// Passed around the application as necessary
+#[derive(Clone)]
 pub struct State {
     /// Represents the current state of the connection
     connection_state: ConnectionState,
@@ -52,7 +59,7 @@ pub struct State {
     entries: HashMap<u16, EntryData>,
     /// Contains the last sequence number for entries
     last_seqnum: u16,
-    handle: Option<Box<Remote>>
+    handle: Option<Box<Remote>>,
 }
 
 impl State {
@@ -62,7 +69,7 @@ impl State {
             connection_state: ConnectionState::Idle,
             entries: HashMap::new(),
             last_seqnum: 0,
-            handle: None
+            handle: None,
         }
     }
 
@@ -99,10 +106,11 @@ impl State {
         self.connection_state = state;
 
         if let ConnectionState::Connected(ref tx) = self.connection_state {
+            let tx = tx.clone();
             debug!("Spawning KeepAlive Looper");
-            tokio::spawn(Interval::new(Instant::now(), Duration::from_secs(10))
+            self.handle.clone().unwrap().spawn(move |_| Interval::new(Instant::now(), Duration::from_secs(10))
                 .map_err(|_| ())
-                .fold(tx.clone(), |tx, _| {
+                .fold(tx, |tx, _| {
                     debug!("Looping");
                     tx.send(Box::new(KeepAlive)).map_err(|_| ())
                 })
@@ -121,9 +129,62 @@ impl State {
 
     /// Removes a NetworkTables entry of the given `key`
     /// Called in response to packet 0x13 Entry Delete
-    pub fn remove_entry(&mut self, key: u16) {
+    pub(crate) fn remove_entry(&mut self, key: u16) {
         debug!("State updated: Deleting {:#x}", key);
 
         self.entries.remove(&key);
+    }
+
+    pub fn delete_entry(&mut self, key: u16) {
+        if let ConnectionState::Connected(tx) = self.connection_state.clone() {
+            let delete = EntryDelete::new(key);
+            self.handle.clone().unwrap().spawn(move |_|
+                tx.send(Box::new(delete)).then(|_| Ok(())));
+        }
+    }
+
+    pub fn delete_all_entries(&mut self) {
+        if let ConnectionState::Connected(tx) = self.connection_state.clone() {
+            let packet = DeleteAllEntries::new();
+            self.handle.clone().unwrap().spawn(move |_|
+                tx.send(Box::new(packet)).then(|_| Ok(())))
+        }
+    }
+
+    pub fn update_entry(&mut self, id: u16, new_value: EntryValue) {
+        if let ConnectionState::Connected(tx) = self.connection_state.clone() {
+            self.last_seqnum += 1;
+            let packet = EntryUpdate::new(id, self.last_seqnum, new_value.entry_type(), new_value);
+            self.handle.clone().unwrap().spawn(move |_|
+                tx.send(Box::new(packet)).then(|_| Ok(())));
+        }
+    }
+
+    pub fn update_entry_flags(&mut self, id: u16, flags: u8) {
+        if let ConnectionState::Connected(tx) = self.connection_state.clone() {
+            let packet = EntryFlagsUpdate::new(id, flags);
+            self.handle.clone().unwrap().spawn(move |_|
+                tx.send(Box::new(packet)).then(|_| Ok(())));
+        }
+    }
+
+    pub fn get_entry(&self, id: u16) -> &EntryData {
+        &self.entries[&id]
+    }
+
+    pub fn get_entry_mut(&mut self, id: u16) -> &mut EntryData {
+        self.entries.get_mut(&id).unwrap()
+    }
+
+    pub fn entries(&self) -> HashMap<u16, EntryData> {
+        self.entries.clone()
+    }
+
+    pub fn entries_mut(&mut self) -> &mut HashMap<u16, EntryData> {
+        &mut self.entries
+    }
+
+    pub fn update_seqnum(&mut self, seqnum: u16) {
+        self.last_seqnum = seqnum;
     }
 }

@@ -25,21 +25,6 @@ pub fn gen_client_packet_derive(input: DeriveInput) -> TokenStream {
                         ::nt_packet::ClientMessage::encode(&self.#ident, buf);
                     }
                 };
-//                let part = if &ty_name.to_string() == "String" {
-//                    quote! {
-//                        ::leb128::write(buf, self.#ident.len() as u64);
-//                        buf.put_slice(self.#ident.as_bytes());
-//                    }
-//                }else {
-//                    match fn_name {
-//                        Some(func) => quote!(buf.#func(self.#ident);),
-//                        None => quote!(::nt_packet::io::Writable::write(&self.#ident, buf);),
-//                    }
-//                    let fn_name = fn_name.unwrap();
-//                    quote! {
-//                        buf.#fn_name(self.#ident);
-//                    }
-//                };
                 parts.push(part);
             }
         }
