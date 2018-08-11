@@ -22,6 +22,18 @@ pub enum ConnectionState {
     Connected(Sender<Box<ClientMessage>>),
 }
 
+use std::fmt::{Debug, Formatter, Error};
+
+impl Debug for ConnectionState {
+    fn fmt<'a>(&self, f: &mut Formatter<'a>) -> Result<(), Error> {
+        match self {
+            ConnectionState::Idle => f.write_str("Idle"),
+            ConnectionState::Connecting => f.write_str("Connecting"),
+            ConnectionState::Connected(_) => f.write_str("Connected"),
+        }
+    }
+}
+
 impl ConnectionState {
     pub fn connected(&self) -> bool {
         match self {
@@ -73,11 +85,8 @@ impl State {
             };
 
             // Unwrap because at this point it's broken if we don't send
-            if let Some(ref handle) = self.handle {
-                handle.spawn(|_| ok(assignment).and_then(move |packet| tx.send(Box::new(packet))).then(|_| Ok(())));
-            }else {
-                panic!("Handle none at call of create_entry")
-            }
+            self.handle.clone().unwrap()
+                .spawn(|_| ok(assignment).and_then(move |packet| tx.send(Box::new(packet))).then(|_| Ok(())));
         }
     }
 
