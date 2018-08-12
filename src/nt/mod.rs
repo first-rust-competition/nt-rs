@@ -18,10 +18,14 @@ use std::collections::HashMap;
 pub(crate) mod state;
 mod conn;
 mod handler;
+/// Module containing definitions for working with NetworkTables entries
+mod entry;
 
 use self::handler::*;
 use self::state::*;
 use self::conn::Connection;
+
+pub use self::entry::*;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables {
@@ -33,7 +37,8 @@ impl NetworkTables {
     /// Performs the initial connection process to the given `target`.
     /// Assumes that target is a valid, running NetworkTables server.
     /// Returns a new [`NetworkTables`] once a connection has been established.
-    pub fn connect(client_name: &'static str, target: SocketAddr) -> NetworkTables {
+    /// If any errors are returned when trying to perform the connection, returns an [`Err`]
+    pub fn connect(client_name: &'static str, target: SocketAddr) -> ::Result<NetworkTables> {
         let state = Arc::new(Mutex::new(State::new()));
         state.lock().unwrap().set_connection_state(ConnectionState::Connecting);
         let (tx, rx) = channel();
@@ -47,19 +52,18 @@ impl NetworkTables {
                 state.lock().unwrap().set_handle(handle.clone().remote().clone());
             }
 
-            core.run(Connection::new(&handle, &target, client_name, state, tx)).unwrap()
+            core.run(Connection::new(&handle, &target, client_name, state, tx)).unwrap();
         });
 
-        rx.wait().unwrap();
+        rx.wait()?;
 
         {
-            while state.lock().unwrap().connection_state().connecting() {
-            }
+            while state.lock().unwrap().connection_state().connecting() {}
         }
 
-        NetworkTables {
+        Ok(NetworkTables {
             state,
-        }
+        })
     }
 
     /// Returns a clone of all the entries this client currently knows of.
@@ -67,24 +71,29 @@ impl NetworkTables {
         self.state.lock().unwrap().entries()
     }
 
-    /// Returns a clone of the entry with id `id`
-    pub fn get_entry(&self, id: u16) -> EntryData {
-        let state = self.state.lock().unwrap().clone();
-        state.get_entry(id).clone()
+    /// Returns an [`Entry`] for the given `id`
+    /// The underlying value of the entry cannot be mutated.
+    pub fn get_entry(&self, id: u16) -> Entry {
+        Entry::new(self, id)
+    }
+
+    /// Returns an [`EntryMut`] for the given `id`
+    /// The underlying value of the entry can be mutated through the given [`EntryMut`]
+    pub fn get_entry_mut(&mut self, id: u16) -> EntryMut {
+        EntryMut::new(self, id)
     }
 
     /// Creates a new entry with data contained in `data`.
-    /// The new entry will be accessible through `self.entries()`
-    ///
-    /// This function will time out after 3 seconds if confirmation the value was written has not been received.
-    pub fn create_entry(&mut self, data: EntryData) {
+    /// Returns the id of the new entry, once the server has assigned it
+    pub fn create_entry(&mut self, data: EntryData) -> u16 {
         let rx = self.state.lock().unwrap().create_entry(data);
-        rx.wait().next();
+        let id = rx.wait().next().unwrap().unwrap();
+        id
     }
 
     /// Deletes the entry with id `id` from the server the client is currently connected to
     /// Must be used with care. Cannot be undone
-    pub fn delete_entry(&mut self, id: u16) {
+    pub(crate) fn delete_entry(&mut self, id: u16) {
         self.state.lock().unwrap().delete_entry(id);
     }
 
@@ -96,12 +105,12 @@ impl NetworkTables {
 
     /// Updates the value of the entry with id `id`.
     /// The updated value of the entry will match `new_value`
-    pub fn update_entry(&mut self, id: u16, new_value: EntryValue) {
+    pub(crate) fn update_entry(&mut self, id: u16, new_value: EntryValue) {
         self.state.lock().unwrap().update_entry(id, new_value);
     }
 
     /// Updates the flags of the entry with id `id`.
-    pub fn update_entry_flags(&mut self, id: u16, flags: u8) {
+    pub(crate) fn update_entry_flags(&mut self, id: u16, flags: u8) {
         self.state.lock().unwrap().update_entry_flags(id, flags);
     }
 
@@ -116,26 +125,28 @@ impl NetworkTables {
 pub(crate) fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>, rx: Receiver<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
     debug!("Spawned packet send loop");
     rx
-        .map_err(|_| ())
-        .fold(tx, |tx, packet| tx.send(packet).map_err(|_| ()))
-        .then(|_| Ok(()))
+        .fold(tx, |tx, packet| tx.send(packet)
+            .map_err(|e| error!("Packet sender encountered an error: {}", e)))
+        .map(drop)
 }
 
 #[doc(hidden)]
-pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=Error>, tx: Sender<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
+pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=Error>, tx: Sender<Box<ClientMessage>>) -> impl Future<Item=(), Error=Error> {
     debug!("Spawned socket poll");
 
     // This function will be called as new packets arrive. Has to be `fold` to maintain ownership over the write half of our codec
     rx
         .fold(tx, move |tx, packet| {
-
             match handle_packet(packet, state.clone(), tx.clone()) {
                 Ok(Some(packet)) => Either::A(tx.send(packet).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))),
                 Ok(None) => Either::B(ok(tx)),
                 Err(e) => Either::B(err(e)),
             }
         })
-        .map_err(|e| error!("handle_packet encountered an error: {}", e))
+        .map_err(|e| {
+            error!("handle_packet encountered an error: {}", e);
+            e
+        })
         .map(drop)
 }
 

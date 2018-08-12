@@ -1,3 +1,5 @@
+#![feature(nll)]
+
 extern crate nt;
 extern crate failure;
 extern crate fern;
@@ -10,23 +12,24 @@ use nt::{NetworkTables, EntryData, EntryValue};
 
 
 fn main() -> Result<()> {
+    setup_logger()?;
 
-    let mut client = NetworkTables::connect("nt-rs", "127.0.0.1:1735".parse()?);
+    let mut client = NetworkTables::connect("nt-rs", "127.0.0.1:1735".parse()?)?;
+    let entry_id = client.create_entry(EntryData::new("update1".to_string(), 0, EntryValue::String("Hello!".to_string())));
 
-    client.create_entry(EntryData::new("update1".to_string(), 0, EntryValue::String("Hello!".to_string())));
+    {
+        let mut entry = client.get_entry_mut(entry_id);
+        println!("{} ==> {:?}", entry.id(), entry.value());
 
-    let (id, entry) = client.entries().into_iter().find(|(_, v)| v.name == "update1".to_string()).unwrap();
-
-    println!("{} ==> {:?}", id, entry);
-
-    client.update_entry(id, EntryValue::String("World!".to_string()));
-
-    for (id, entry) in client.entries() {
-        println!("{} ==> {:?}", id, entry);
+        entry.set_value(EntryValue::String("World!".to_string()));
+        println!("{} ==> {:?}", entry.id(), entry.value());
     }
+
+    while client.connected() {}
 
     Ok(())
 }
+
 fn setup_logger() -> Result<()> {
     fern::Dispatch::new()
         .format(|out, msg, record| {

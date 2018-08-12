@@ -50,7 +50,7 @@ impl Connection {
                 sender.send(()).unwrap();
 
                 handle.spawn(|_| send_packets(tx, chan_rx));
-                poll_socket(state.clone(), rx, chan_tx.clone())
+                poll_socket(state.clone(), rx, chan_tx.clone()).map_err(move |_| state.lock().unwrap().set_connection_state(ConnectionState::Idle))
             })
             .then(move |_| {
                 end_state.lock().unwrap().set_connection_state(ConnectionState::Idle);

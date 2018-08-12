@@ -30,5 +30,8 @@ pub const NT_PROTOCOL_REV: u16 = 0x0300;
 mod proto;
 mod nt;
 
+/// Base result type for nt-rs
+pub type Result<T> = std::result::Result<T, failure::Error>;
+
 pub use self::proto::types::{EntryData, EntryValue, EntryType};
 pub use self::nt::*;

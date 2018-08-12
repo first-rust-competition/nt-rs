@@ -6,7 +6,7 @@ use nt_packet::ClientMessage;
 
 use futures::{Stream, Sink, Future};
 use futures::sync::mpsc::{channel, Sender, Receiver};
-use tokio::timer::{Interval, Delay};
+use tokio::timer::Interval;
 use tokio_core::reactor::Remote;
 
 /// Enum representing what part of the connection the given `State` is currently in
@@ -60,7 +60,7 @@ pub struct State {
     /// Contains the entries received from the server. Updated as they are sent
     entries: HashMap<u16, EntryData>,
     handle: Option<Box<Remote>>,
-    pending_entries: Vec<(EntryData, Sender<()>)>,
+    pending_entries: Vec<(EntryData, Sender<u16>)>,
 }
 
 impl State {
@@ -81,13 +81,15 @@ impl State {
 
     /// Called internally from [`NetworkTables`](struct.NetworkTables.html) to create a new entry on the server.
     /// `self` is updated with the new entry when the server re-broadcasts, having given correct metadata to the item.
-    pub(crate) fn create_entry(&mut self, data: EntryData) -> Receiver<()> {
+    pub(crate) fn create_entry(&mut self, data: EntryData) -> Receiver<u16> {
         if let ConnectionState::Connected(ref tx) = self.connection_state {
             let tx = tx.clone();
 
             // Gross, but oneshots aren't Clone
             let (notify_tx, rx) = channel(1);
             self.pending_entries.push((data.clone(), notify_tx.clone()));
+
+            let chk_data = data.clone();
 
             let packet = EntryAssignment {
                 entry_name: data.name,
@@ -98,15 +100,17 @@ impl State {
                 entry_value: data.value,
             };
 
+            if let Some((id, _)) = self.entries.iter().find(|(_, it)| **it == chk_data) {
+                let id = id.clone();
+                self.handle.clone().unwrap()
+                    .spawn(move |_| notify_tx.send(id).map_err(drop)
+                        .then(|_| Ok(())));
+                return rx;
+            }
+
             // Unwrap because at this point it's broken if we don't send
             self.handle.clone().unwrap().spawn(|_|
                 tx.send(Box::new(packet)).then(|_| Ok(())));
-
-            self.handle.clone().unwrap().spawn(|_|
-                Delay::new(Instant::now() + Duration::from_secs(3))
-                    .map_err(drop)
-                    .and_then(|_| notify_tx.send(()).map_err(drop))
-                    .then(|_| Ok(())));
 
             rx
         } else {
@@ -144,7 +148,7 @@ impl State {
         let mut remove_idx = None;
         if let Some((i, (_, tx))) = self.pending_entries.iter().enumerate().find(|(_, (it, _))| *it == data.clone()) {
             remove_idx = Some(i);
-            tx.clone().send(()).and_then(|mut tx| tx.close()).wait().unwrap();
+            tx.clone().send(info.entry_id).and_then(|mut tx| tx.close()).wait().unwrap();
         }
 
         if let Some(i) = remove_idx {
@@ -209,13 +213,10 @@ impl State {
     /// `self` will be updated with the new value when the server re-broadcasts.
     pub(crate) fn update_entry(&mut self, id: u16, new_value: EntryValue) {
         if let ConnectionState::Connected(tx) = self.connection_state.clone() {
-
             let entry = &self.entries[&id];
             let packet = EntryUpdate::new(id, entry.seqnum + 1, new_value.entry_type(), new_value);
             self.handle_entry_updated(packet.clone());
-            self.handle.clone().unwrap().spawn(move |_|
-                tx.send(Box::new(packet)).then(|_| Ok(())));
-
+            tx.send(Box::new(packet)).wait().unwrap();
         }
     }
 
