@@ -9,6 +9,9 @@ Sample usages can be found in the `examples/` directory
 # What is NetworkTables?
 NetworkTables, or NT, is a TCP based protocol for key-value data storage. It is most used within code for _FIRST_ Robotics Competition robots, for sharing data across the robot's network.
 
+# Checklist 
+- [ ] RPC support
+
 # License
 This project is licensed under the MIT license.
 
