@@ -1,9 +1,9 @@
 [package]
 name = "nt-packet-derive"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Redrield <redrield@gmail.com>"]
 
-description = "Crate containing proc macro derives for nt-s"
+description = "Crate containing proc macro derives for nt-rs"
 license = "MIT"
 repository = "https://gitlab.com/Redrield/nt-rs"
 

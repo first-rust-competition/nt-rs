@@ -3,6 +3,10 @@ name = "nt"
 version = "0.1.0"
 authors = ["Redrield <redrield@gmail.com>"]
 
+description = "A NetworkTables revision 3 client library for Rust"
+license = "MIT"
+repository = "https://gitlab.com/Redrield/nt-rs"
+
 [dependencies]
 tokio = "0.1.7"
 bytes = "0.4.9"
