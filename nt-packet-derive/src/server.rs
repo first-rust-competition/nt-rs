@@ -1,6 +1,6 @@
 use super::util;
 use proc_macro2::{TokenStream, Span};
-use syn::{DeriveInput, DataStruct, Data, Fields, FieldsNamed, Ident};
+use syn::{DeriveInput, Data, Fields, Ident};
 
 
 pub fn gen_server_packet_derive(input: DeriveInput) -> TokenStream {
@@ -14,7 +14,6 @@ pub fn gen_server_packet_derive(input: DeriveInput) -> TokenStream {
             for field in named_fields.named.into_iter() {
                 let ident = field.ident.unwrap().clone();
                 let ty_name = util::parse_type(&field.ty).unwrap();
-                let fn_name = name_for_ty(&ty_name.to_string());
                 let (fn_name, bytes) = name_for_ty(&ty_name.to_string());
                 let part = if let Some(func) = fn_name {
                     quote! {

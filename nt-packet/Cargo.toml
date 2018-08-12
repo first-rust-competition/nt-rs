@@ -1,13 +1,17 @@
 [package]
 name = "nt-packet"
 version = "0.1.0"
-authors = ["Redrield <redrield@gmail.com>"]
+authors = ["Rhys Kenwell <redrield@gmail.com>"]
+
+description = "Crate containing traits core to nt-rs"
+license = "MIT"
+repository = "https://gitlab.com/Redrield/nt-rs"
 
 [dependencies]
 bytes = "0.4.9"
 
-[dependencies.leb128]
-git = "https://github.com/Redrield/leb128"
-rev = "f0a9c2e"
+[dependencies.nt-leb128]
+version = "0.2.4"
 default-features = false
 features = ["use-bytes"]
+

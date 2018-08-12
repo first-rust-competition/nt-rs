@@ -4,6 +4,7 @@ use leb128::LEB128Write;
 
 use bytes::{BytesMut, BufMut};
 
+#[allow(unused)]
 pub struct RPCExecute {
     rpc_definition_id: u16,
     unique_id: u16,

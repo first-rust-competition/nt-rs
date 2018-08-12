@@ -9,7 +9,6 @@ mod server;
 mod util;
 
 use proc_macro::TokenStream;
-use proc_macro2::Span;
 
 #[proc_macro_derive(ClientMessage, attributes(packet_id))]
 pub fn nt_client_packet_derive(input: TokenStream) -> TokenStream {

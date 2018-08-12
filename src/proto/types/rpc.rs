@@ -2,7 +2,7 @@ use super::*;
 
 use bytes::{BytesMut, BufMut};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RPCDefinitionData {
     version: u8,
     procedure_name: String,
@@ -10,7 +10,7 @@ pub struct RPCDefinitionData {
     parameters: Vec<Parameter>
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Parameter {
     parameter_type: EntryType,
     parameter_name: String,
@@ -19,7 +19,7 @@ pub struct Parameter {
     results: Vec<Result>
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Result {
     result_type: EntryType,
     result_name: String,

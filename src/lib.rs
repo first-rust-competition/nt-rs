@@ -1,4 +1,13 @@
+//! # nt
+//!
+//! `nt` is a client library to the NetworkTables revision 3 protocol, backed by tokio.
+//!
+//! The provided [`NetworkTables`](struct.NetworkTables.html) struct contains methods for querying
+//! the state of the connection, accessing, as well as updating and creating entries that will be
+//! synced to the server.
+
 #![feature(attr_literals, nll)]
+#![deny(missing_docs)]
 
 extern crate futures;
 extern crate tokio;
@@ -11,13 +20,12 @@ extern crate nt_packet_derive;
 extern crate failure;
 #[macro_use]
 extern crate log;
-extern crate leb128;
+extern crate nt_leb128 as leb128;
 #[macro_use]
 extern crate derive_new;
 
+#[doc(hidden)]
 pub const NT_PROTOCOL_REV: u16 = 0x0300;
-
-pub type Result<T> = std::result::Result<T, failure::Error>;
 
 mod proto;
 mod nt;

@@ -1,5 +1,15 @@
+//! A crate containing base traits for interacting with NetworkTables packets in buffers
+//!
+//! This crate contains the traits core to `nt` and `nt-packet-derive` for reading and writing
+//! values (Packets or other complex values) to and from byte buffers from the `bytes` crate.
+//!
+//! This is not meant to be used alone, and is merely here so that `nt` and `nt-packet-derive` are able to share the same
+//! key traits.
+
+#![deny(missing_docs)]
+
 extern crate bytes;
-extern crate leb128;
+extern crate nt_leb128 as leb128;
 
 use bytes::{Buf, BytesMut, BufMut};
 

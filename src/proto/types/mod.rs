@@ -7,44 +7,76 @@ use std::convert::AsRef;
 
 pub mod rpc;
 
-#[derive(Clone, Debug)]
+/// Struct containing the data associated with an entry.
+/// Used interally to store entries
+#[derive(Clone, Debug, PartialEq)]
 pub struct EntryData {
+    /// The name associated with this entry
     pub name: String,
+    /// The flags associated with this entry
     pub flags: u8,
-    pub value: EntryValue
+    /// The value associated with this entry
+    pub value: EntryValue,
+    /// The most recent sequence number associated with this entry
+    pub seqnum: u16,
 }
 
 impl EntryData {
+    /// Creates a new [`EntryData`] with the given parameters, and a sequence number of 1
     pub fn new(name: String, flags: u8, value: EntryValue) -> EntryData {
+        Self::new_with_seqnum(name, flags, value, 1)
+    }
+
+    #[doc(hidden)]
+    pub(crate) fn new_with_seqnum(name: String, flags: u8, value: EntryValue, seqnum: u16) -> EntryData {
         EntryData {
             name,
             flags,
-            value
+            value,
+            seqnum
         }
     }
 }
 
+/// Corresponds to the type tag that NetworkTables presents prior to the corresponding [`EntryValue`]
 #[derive(Debug, PartialEq, Clone)]
 pub enum EntryType {
+    /// Represents a boolean entry value
     Boolean,
+    /// Represents a double entry value
     Double,
+    /// Represents a string entry value
     String,
+    /// Represents a raw data entry value
     RawData,
+    /// Represents a boolean array entry value
     BooleanArray,
+    /// Represents a double array entry value
     DoubleArray,
+    /// Represents a string array entry value
     StringArray,
+    /// Represents an RPC definition entry value
     RPCDef,
 }
 
-#[derive(Debug, Clone)]
+/// Enum representing the different values that NetworkTables supports
+#[derive(Debug, Clone, PartialEq)]
 pub enum EntryValue {
+    /// An entry value containing a single boolean
     Boolean(bool),
+    /// An entry value containing a single double
     Double(f64),
+    /// An entry value containing a single string
     String(String),
+    /// An entry value containing raw data
     RawData(Vec<u8>),
+    /// An entry value containing a boolean array
     BooleanArray(Vec<bool>),
+    /// An entry value containing a double array
     DoubleArray(Vec<f64>),
+    /// An entry value containing a string array
     StringArray(Vec<String>),
+    /// An entry value containing definition data for a RPC
     RPCDef(RPCDefinitionData),
 }
 
@@ -84,6 +116,7 @@ impl ServerMessage for EntryType {
 }
 
 impl EntryType {
+    /// Deserializes an [`EntryValue`] of type `self` from the given `buf`
     pub fn get_entry(&self, mut buf: &mut Buf) -> (EntryValue, usize) {
         match self {
             &EntryType::Boolean => (EntryValue::Boolean(buf.get_u8() == 1), 1),
@@ -187,6 +220,7 @@ impl ClientMessage for EntryValue {
 }
 
 impl EntryValue {
+    /// Returns the [`EntryType`] corresponding to the variant of [`self`]
     pub fn entry_type(&self) -> EntryType {
         match self {
             EntryValue::Boolean(_) => EntryType::Boolean,

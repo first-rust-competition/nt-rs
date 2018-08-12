@@ -2,7 +2,7 @@
 use super::util;
 use proc_macro2::{TokenStream, Span};
 
-use syn::{DeriveInput, DataStruct, Data, Fields, FieldsNamed, Ident};
+use syn::{DeriveInput, Data, Fields, Ident};
 
 pub fn gen_client_packet_derive(input: DeriveInput) -> TokenStream {
     let packet_id = util::parse_packet_id(input.attrs).unwrap();

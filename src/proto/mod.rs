@@ -14,7 +14,7 @@ use nt_packet::*;
 use self::server::*;
 
 /// Represents an attempt to decode a `ServerMessage` from the given `buf`
-pub fn try_decode(buf: &mut Buf, state: &Arc<Mutex<State>>) -> (Option<Packet>, usize) {
+pub fn try_decode(buf: &mut Buf, _state: &Arc<Mutex<State>>) -> (Option<Packet>, usize) {
     use self::server::*;
     // Safety net to not read if there's nothing there
     if buf.remaining() < 1 {
@@ -128,7 +128,7 @@ pub struct EntryFlagsUpdate {
     pub entry_flags: u8
 }
 
-#[derive(Debug, ClientMessage, new)]
+#[derive(Debug, ClientMessage, new, Clone)]
 #[packet_id = 0x11]
 pub struct EntryUpdate {
     pub entry_id: u16,

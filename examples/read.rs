@@ -14,10 +14,6 @@ use nt::NetworkTables;
 
 use std::io;
 
-mod input;
-
-use input::Message;
-
 fn main() -> Result<()> {
     setup_logger()?;
 

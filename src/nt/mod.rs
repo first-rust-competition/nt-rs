@@ -1,8 +1,8 @@
 use std::net::SocketAddr;
 use futures::Future;
-use futures::future::{ok, Either};
+use futures::future::{ok, Either, err};
 use futures::sync::mpsc::{Sender, Receiver};
-use futures::sync::oneshot::{channel, Sender as OneshotSender};
+use futures::sync::oneshot::channel;
 use tokio::prelude::*;
 use tokio_core::reactor::Core;
 
@@ -11,11 +11,11 @@ use proto::*;
 use proto::types::*;
 
 use std::sync::{Arc, Mutex};
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 use std::thread;
 use std::collections::HashMap;
 
-pub mod state;
+pub(crate) mod state;
 mod conn;
 mod handler;
 
@@ -32,7 +32,7 @@ pub struct NetworkTables {
 impl NetworkTables {
     /// Performs the initial connection process to the given `target`.
     /// Assumes that target is a valid, running NetworkTables server.
-    /// Returns a `NetworkTables`. The state of the connection can be told by the contained `State`
+    /// Returns a new [`NetworkTables`] once a connection has been established.
     pub fn connect(client_name: &'static str, target: SocketAddr) -> NetworkTables {
         let state = Arc::new(Mutex::new(State::new()));
         state.lock().unwrap().set_connection_state(ConnectionState::Connecting);
@@ -54,7 +54,6 @@ impl NetworkTables {
 
         {
             while state.lock().unwrap().connection_state().connecting() {
-
             }
         }
 
@@ -63,41 +62,58 @@ impl NetworkTables {
         }
     }
 
+    /// Returns a clone of all the entries this client currently knows of.
     pub fn entries(&self) -> HashMap<u16, EntryData> {
         self.state.lock().unwrap().entries()
     }
 
+    /// Returns a clone of the entry with id `id`
     pub fn get_entry(&self, id: u16) -> EntryData {
         let state = self.state.lock().unwrap().clone();
         state.get_entry(id).clone()
     }
 
+    /// Creates a new entry with data contained in `data`.
+    /// The new entry will be accessible through `self.entries()`
+    ///
+    /// This function will time out after 3 seconds if confirmation the value was written has not been received.
     pub fn create_entry(&mut self, data: EntryData) {
-        self.state.lock().unwrap().create_entry(data);
+        let rx = self.state.lock().unwrap().create_entry(data);
+        rx.wait().next();
     }
 
+    /// Deletes the entry with id `id` from the server the client is currently connected to
+    /// Must be used with care. Cannot be undone
     pub fn delete_entry(&mut self, id: u16) {
         self.state.lock().unwrap().delete_entry(id);
     }
 
+    /// Deletes all entries from the server this client is currently connected to
+    /// Must be used with care. Cannot be undone
     pub fn delete_all_entries(&mut self) {
         self.state.lock().unwrap().delete_all_entries();
     }
 
+    /// Updates the value of the entry with id `id`.
+    /// The updated value of the entry will match `new_value`
     pub fn update_entry(&mut self, id: u16, new_value: EntryValue) {
         self.state.lock().unwrap().update_entry(id, new_value);
     }
 
+    /// Updates the flags of the entry with id `id`.
     pub fn update_entry_flags(&mut self, id: u16, flags: u8) {
         self.state.lock().unwrap().update_entry_flags(id, flags);
     }
 
+    /// Checks if the client is actively connected to an NT server
+    /// true if the 3-way handshake has been completed, and the client is fully synchronized
     pub fn connected(&self) -> bool {
         self.state.lock().unwrap().connection_state().connected()
     }
 }
 
-pub fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>, rx: Receiver<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
+#[doc(hidden)]
+pub(crate) fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>, rx: Receiver<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
     debug!("Spawned packet send loop");
     rx
         .map_err(|_| ())
@@ -105,22 +121,21 @@ pub fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>,
         .then(|_| Ok(()))
 }
 
-/// Function containing the future for polling the remote peer for new packets
-/// Expects to be started with `tokio::spawn`
-/// Mutates the `state` as packets are received
+#[doc(hidden)]
 pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=Error>, tx: Sender<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
     debug!("Spawned socket poll");
 
     // This function will be called as new packets arrive. Has to be `fold` to maintain ownership over the write half of our codec
     rx
-        .map_err(drop)
         .fold(tx, move |tx, packet| {
+
             match handle_packet(packet, state.clone(), tx.clone()) {
-                Some(packet) => Either::A(tx.send(packet).map_err(drop)),
-                None => Either::B(ok(tx))
+                Ok(Some(packet)) => Either::A(tx.send(packet).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))),
+                Ok(None) => Either::B(ok(tx)),
+                Err(e) => Either::B(err(e)),
             }
         })
-        .then(|_| Ok(()))
+        .map_err(|e| error!("handle_packet encountered an error: {}", e))
+        .map(drop)
 }
-
 

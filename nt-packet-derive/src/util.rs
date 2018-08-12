@@ -1,4 +1,3 @@
-use proc_macro2::Span;
 use syn::{Ident, Type, PathSegment, Attribute, Meta, Lit};
 
 pub fn parse_type(ty: &Type) -> Option<Ident> {
