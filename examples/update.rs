@@ -25,8 +25,6 @@ fn main() -> Result<()> {
         println!("{} ==> {:?}", entry.id(), entry.value());
     }
 
-    while client.connected() {}
-
     Ok(())
 }
 
@@ -41,7 +39,7 @@ fn setup_logger() -> Result<()> {
                 msg
             ))
         })
-        .level(log::LevelFilter::Debug)
+        .level(log::LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()?;
     Ok(())

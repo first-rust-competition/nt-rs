@@ -1,6 +1,6 @@
 use tokio::net::TcpStream;
 use futures::{Future, Poll, Stream, Sink};
-use futures::sync::mpsc::channel;
+use futures::sync::mpsc::{channel, Receiver};
 use futures::sync::oneshot::Sender as OneshotSender;
 use tokio_core::reactor::Handle;
 use tokio_codec::Decoder;
@@ -27,7 +27,7 @@ impl Future for Connection {
 }
 
 impl Connection {
-    pub fn new(handle: &Handle, target: &SocketAddr, client_name: &'static str, state: Arc<Mutex<State>>, sender: OneshotSender<()>) -> Connection {
+    pub fn new(handle: &Handle, target: &SocketAddr, client_name: &'static str, state: Arc<Mutex<State>>, sender: OneshotSender<()>, end_rx: Receiver<()>) -> Connection {
         let handle = handle.clone().remote().clone();
         let end_state = state.clone();
         let err_state = state.clone();
@@ -50,7 +50,7 @@ impl Connection {
                 sender.send(()).unwrap();
 
                 handle.spawn(|_| send_packets(tx, chan_rx));
-                poll_socket(state.clone(), rx, chan_tx.clone()).map_err(move |_| state.lock().unwrap().set_connection_state(ConnectionState::Idle))
+                poll_socket(state.clone(), rx, chan_tx.clone(), end_rx).map_err(move |_| state.lock().unwrap().set_connection_state(ConnectionState::Idle))
             })
             .then(move |_| {
                 end_state.lock().unwrap().set_connection_state(ConnectionState::Idle);

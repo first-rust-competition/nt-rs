@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use futures::Future;
 use futures::future::{ok, Either, err};
-use futures::sync::mpsc::{Sender, Receiver};
+use futures::sync::mpsc::{Sender, Receiver, channel as mpsc_channel};
 use futures::sync::oneshot::channel;
 use tokio::prelude::*;
 use tokio_core::reactor::Core;
@@ -31,6 +31,7 @@ pub use self::entry::*;
 pub struct NetworkTables {
     /// Contains the initial connection future with a reference to the framed NT codec
     state: Arc<Mutex<State>>,
+    end_tx: Sender<()>
 }
 
 impl NetworkTables {
@@ -43,6 +44,8 @@ impl NetworkTables {
         state.lock().unwrap().set_connection_state(ConnectionState::Connecting);
         let (tx, rx) = channel();
 
+        let (end_tx, end_rx) = mpsc_channel(1);
+
         let thread_state = state.clone();
         let _ = thread::spawn(move || {
             let mut core = Core::new().unwrap();
@@ -52,7 +55,7 @@ impl NetworkTables {
                 state.lock().unwrap().set_handle(handle.clone().remote().clone());
             }
 
-            core.run(Connection::new(&handle, &target, client_name, state, tx)).unwrap();
+            core.run(Connection::new(&handle, &target, client_name, state, tx, end_rx)).unwrap();
         });
 
         rx.wait()?;
@@ -63,6 +66,7 @@ impl NetworkTables {
 
         Ok(NetworkTables {
             state,
+            end_tx
         })
     }
 
@@ -121,6 +125,12 @@ impl NetworkTables {
     }
 }
 
+impl Drop for NetworkTables {
+    fn drop(&mut self) {
+        self.end_tx.clone().send(()).wait().unwrap();
+    }
+}
+
 #[doc(hidden)]
 pub(crate) fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>, rx: Receiver<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
     debug!("Spawned packet send loop");
@@ -131,16 +141,19 @@ pub(crate) fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=
 }
 
 #[doc(hidden)]
-pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=Error>, tx: Sender<Box<ClientMessage>>) -> impl Future<Item=(), Error=Error> {
+pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=Error>, tx: Sender<Box<ClientMessage>>, end_rx: Receiver<()>) -> impl Future<Item=(), Error=Error> {
     debug!("Spawned socket poll");
 
     // This function will be called as new packets arrive. Has to be `fold` to maintain ownership over the write half of our codec
-    rx
+    rx.map(Either::A).select(end_rx.map(Either::B).map_err(|e| Error::new(ErrorKind::Other, "Error encountered from closing channel")))
         .fold(tx, move |tx, packet| {
-            match handle_packet(packet, state.clone(), tx.clone()) {
-                Ok(Some(packet)) => Either::A(tx.send(packet).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))),
-                Ok(None) => Either::B(ok(tx)),
-                Err(e) => Either::B(err(e)),
+            match packet {
+                Either::A(packet) => match handle_packet(packet, state.clone(), tx.clone()) {
+                    Ok(Some(packet)) => Either::A(tx.send(packet).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))),
+                    Ok(None) => Either::B(ok(tx)),
+                    Err(e) => Either::B(err(e)),
+                }
+                Either::B(_) => Either::B(err(Error::new(ErrorKind::Other, "NetworkTables dropped")))
             }
         })
         .map_err(|e| {
