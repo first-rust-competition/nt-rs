@@ -1,24 +1,34 @@
 extern crate nt;
 extern crate fern;
-#[macro_use]
 extern crate log;
 extern crate failure;
 extern crate chrono;
 
-type Result<T> = std::result::Result<T, failure::Error>;
-
 use nt::NetworkTables;
+use nt::callback::CallbackType;
 
-use std::io;
+type Result<T> = std::result::Result<T, failure::Error>;
 
 fn main() -> Result<()> {
     setup_logger()?;
 
-    let mut client = NetworkTables::connect("nt-test", "127.0.0.1:1735".parse()?)?;
+    let mut client = NetworkTables::connect("nt-rs", "127.0.0.1:1735".parse()?)?;
+    client.add_callback(CallbackType::Add, |new_entry| {
+        println!("A new entry was received! {:?}", new_entry);
+    });
 
-    for (id, data) in client.entries() {
-        info!("{} to {:?}", id, data);
+    client.add_callback(CallbackType::Delete, |deleted_entry| {
+        println!("An entry was deleted. {:?}", deleted_entry);
+    });
+
+    client.add_callback(CallbackType::Update, |updated_entry| {
+        println!("An entry was updated. New value: {:?}", updated_entry)
+    });
+
+    while client.connected() {
+        // Loop forever
     }
+
     Ok(())
 }
 

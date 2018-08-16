@@ -3,11 +3,14 @@ use std::time::{Duration, Instant};
 use proto::types::{EntryData, EntryValue};
 use proto::*;
 use nt_packet::ClientMessage;
+use nt::callback::*;
 
 use futures::{Stream, Sink, Future};
 use futures::sync::mpsc::{channel, Sender, Receiver};
 use tokio::timer::Interval;
 use tokio_core::reactor::Remote;
+
+use multimap::MultiMap;
 
 /// Enum representing what part of the connection the given `State` is currently in
 #[derive(Clone)]
@@ -53,7 +56,7 @@ impl ConnectionState {
 }
 
 /// Struct containing the internal state of a connection
-#[derive(Clone)]
+//#[derive(Clone)]
 pub struct State {
     /// Represents the current state of the connection
     connection_state: ConnectionState,
@@ -61,6 +64,7 @@ pub struct State {
     entries: HashMap<u16, EntryData>,
     handle: Option<Box<Remote>>,
     pending_entries: Vec<(EntryData, Sender<u16>)>,
+    callbacks: MultiMap<CallbackType, Box<Action>>
 }
 
 impl State {
@@ -71,6 +75,7 @@ impl State {
             entries: HashMap::new(),
             handle: None,
             pending_entries: Vec::new(),
+            callbacks: MultiMap::new()
         }
     }
 
@@ -162,6 +167,10 @@ impl State {
             }
         }
 
+        self.callbacks.iter_all().filter(|&(key, _)| *key == CallbackType::Add)
+            .flat_map(|(_, cbs)| cbs)
+            .for_each(|cb| cb(&data));
+
         self.entries.insert(info.entry_id, data);
     }
 
@@ -177,13 +186,25 @@ impl State {
         if update.entry_type == old_entry.value.entry_type() {
             old_entry.value = update.entry_value;
             old_entry.seqnum += 1;
+
+            let old_entry = self.get_entry(update.entry_id);
+
+            self.callbacks.iter_all().filter(|&(key, _)| *key == CallbackType::Update)
+                .flat_map(|(_, cbs)| cbs)
+                .for_each(|cb| cb(&old_entry))
         }
+
     }
 
     /// Removes a NetworkTables entry of the given `key`
     /// Called in response to packet 0x13 Entry Delete
     pub(crate) fn remove_entry(&mut self, key: u16) {
         debug!("State updated: Deleting {:#x}", key);
+        let entry_to_delete = &self.entries[&key];
+
+        self.callbacks.iter_all().filter(|&(key, _)| *key == CallbackType::Delete)
+            .flat_map(|(_, cbs)| cbs)
+            .for_each(|cb| cb(entry_to_delete));
 
         self.entries.remove(&key);
     }
@@ -228,6 +249,10 @@ impl State {
             self.handle.clone().unwrap().spawn(move |_|
                 tx.send(Box::new(packet)).then(|_| Ok(())));
         }
+    }
+
+    pub(crate) fn callbacks_mut(&mut self) -> &mut MultiMap<CallbackType, Box<Action>> {
+        &mut self.callbacks
     }
 
     /// Gets an immutable reference to the entry with id `id` from the internal map of `self`

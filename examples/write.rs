@@ -11,7 +11,7 @@ type Result<T> = std::result::Result<T, failure::Error>;
 
 fn main() -> Result<()> {
     setup_logger()?;
-    let mut client = NetworkTables::connect("nt-rs", "127.0.0.2:1735".parse()?);
+    let mut client = NetworkTables::connect("nt-rs", "127.0.0.2:1735".parse()?)?;
 
     client.create_entry(EntryData::new("newEntry".to_string(), 0, EntryValue::Double(5.0)));
 

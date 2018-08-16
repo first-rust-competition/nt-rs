@@ -20,12 +20,14 @@ mod conn;
 mod handler;
 /// Module containing definitions for working with NetworkTables entries
 mod entry;
+mod callback;
 
 use self::handler::*;
 use self::state::*;
 use self::conn::Connection;
 
 pub use self::entry::*;
+pub use self::callback::CallbackType;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables {
@@ -68,6 +70,15 @@ impl NetworkTables {
             state,
             end_tx
         })
+    }
+
+    /// Registers the given closure `cb` as a callback to be called for [`CallbackType`] `action`
+    /// When `action` occurs due to either network or user events, all callbacks registered for that type will be called
+    pub fn add_callback<F>(&mut self, action: CallbackType, cb: F)
+        where F: Fn(&EntryData) + Send + 'static
+    {
+        let mut state = self.state.lock().unwrap();
+        state.callbacks_mut().insert(action, Box::new(cb));
     }
 
     /// Returns a clone of all the entries this client currently knows of.
@@ -145,7 +156,7 @@ pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=
     debug!("Spawned socket poll");
 
     // This function will be called as new packets arrive. Has to be `fold` to maintain ownership over the write half of our codec
-    rx.map(Either::A).select(end_rx.map(Either::B).map_err(|e| Error::new(ErrorKind::Other, "Error encountered from closing channel")))
+    rx.map(Either::A).select(end_rx.map(Either::B).map_err(|_| Error::new(ErrorKind::Other, "Error encountered from closing channel")))
         .fold(tx, move |tx, packet| {
             match packet {
                 Either::A(packet) => match handle_packet(packet, state.clone(), tx.clone()) {

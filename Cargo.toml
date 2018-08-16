@@ -1,6 +1,6 @@
 [package]
 name = "nt"
-version = "0.2.1"
+version = "0.2.2"
 authors = ["Redrield <redrield@gmail.com>"]
 
 description = "A NetworkTables revision 3 client library for Rust"
@@ -20,6 +20,7 @@ tokio-core = "0.1.17"
 derive-new = "0.5.5"
 fern = "0.5.6"
 chrono = "0.4.5"
+multimap = "0.4.0"
 
 [dependencies.nt-leb128]
 version = "0.2.4"
