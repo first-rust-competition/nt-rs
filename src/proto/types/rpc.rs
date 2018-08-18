@@ -95,26 +95,9 @@ impl ServerMessage for Parameter {
 
 impl ServerMessage for RPCDefinitionData {
     fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
-        let mut bytes_read = 0;
+        // Terrible workaround to the fact that ntcore isn't spec compliant
+        let (_, bytes_read) = String::decode(buf);
 
-        let ver = buf.get_u8();
-        bytes_read += 1;
-        let procedure_name = {
-            let (procedure_name, string_bytes_read) = String::decode(buf);
-            bytes_read += string_bytes_read;
-            procedure_name.unwrap()
-        };
-
-        let len = buf.get_u8() as usize;
-        bytes_read += 1;
-        let mut parameters = Vec::with_capacity(len);
-
-        for i in 0..len {
-            let (param, bytes) = Parameter::decode(buf);
-            bytes_read += bytes;
-            parameters[i] = param.unwrap();
-        }
-
-        (Some(RPCDefinitionData { version: ver, procedure_name, parameters_size: len, parameters }), bytes_read)
+        (None, bytes_read)
     }
 }

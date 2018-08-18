@@ -148,6 +148,10 @@ impl State {
     /// Adds a NetworkTables entry with the given `key` and `entry`
     /// Called in response to packet 0x10 Entry Assignment
     pub(crate) fn add_entry(&mut self, info: EntryAssignment) {
+        if info.entry_value == EntryValue::Pass {
+            return;
+        }
+
         let data = EntryData::new_with_seqnum(info.entry_name, info.entry_flags, info.entry_value, info.entry_sequence_num);
 
         let mut remove_idx = None;

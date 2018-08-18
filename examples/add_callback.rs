@@ -5,7 +5,7 @@ extern crate failure;
 extern crate chrono;
 
 use nt::NetworkTables;
-use nt::callback::CallbackType;
+use nt::CallbackType;
 
 type Result<T> = std::result::Result<T, failure::Error>;
 

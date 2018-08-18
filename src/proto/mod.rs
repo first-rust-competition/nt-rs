@@ -28,30 +28,31 @@ pub fn try_decode(buf: &mut Buf, _state: &Arc<Mutex<State>>) -> (Option<Packet>,
     let mut bytes = 1;
 
     let packet = match id {
-        0x00 =>  {
+        0x00 => {
             let (packet, bytes_read) = KeepAlive::decode(buf);
             bytes += bytes_read;
             Some(Packet::KeepAlive(packet.unwrap()))
-        },
+        }
         0x02 => {
             let (packet, bytes_read) = ProtocolVersionUnsupported::decode(buf);
             bytes += bytes_read;
             Some(Packet::ProtocolVersionUnsupported(packet.unwrap()))
-        },
+        }
         0x04 => {
             let (packet, bytes_read) = ServerHello::decode(buf);
             bytes += bytes_read;
             Some(Packet::ServerHello(packet.unwrap()))
-        },
+        }
         0x03 => {
             let (packet, bytes_read) = ServerHelloComplete::decode(buf);
             bytes += bytes_read;
             Some(Packet::ServerHelloComplete(packet.unwrap()))
-        },
+        }
         0x10 => {
             let (packet, bytes_read) = EntryAssignment::decode(buf);
             bytes += bytes_read;
-            Some(Packet::EntryAssignment(packet.unwrap()))
+            let packet = packet.unwrap();
+            Some(Packet::EntryAssignment(packet))
         }
         0x13 => {
             let (packet, bytes_read) = EntryDelete::decode(buf);
@@ -125,7 +126,7 @@ impl DeleteAllEntries {
 #[packet_id = 0x12]
 pub struct EntryFlagsUpdate {
     pub entry_id: u16,
-    pub entry_flags: u8
+    pub entry_flags: u8,
 }
 
 #[derive(Debug, ClientMessage, new, Clone)]
@@ -134,7 +135,7 @@ pub struct EntryUpdate {
     pub entry_id: u16,
     pub entry_sequence_num: u16,
     pub entry_type: EntryType,
-    pub entry_value: EntryValue
+    pub entry_value: EntryValue,
 }
 
 impl ServerMessage for EntryUpdate {
@@ -154,7 +155,7 @@ impl ServerMessage for EntryUpdate {
             entry_id,
             entry_sequence_num,
             entry_type,
-            entry_value
+            entry_value,
         }), bytes_read)
     }
 }
@@ -180,7 +181,7 @@ impl EntryAssignment {
             entry_id: id,
             entry_sequence_num: sequence_num,
             entry_flags: flags,
-            entry_value: value
+            entry_value: value,
         }
     }
 }

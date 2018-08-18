@@ -15,7 +15,9 @@ fn main() -> Result<()> {
     setup_logger()?;
 
     let mut client = NetworkTables::connect("nt-test", "127.0.0.1:1735".parse()?)?;
+    info!("Constructed client");
 
+    info!("Listing entries");
     for (id, data) in client.entries() {
         info!("{} to {:?}", id, data);
     }

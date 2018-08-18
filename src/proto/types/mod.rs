@@ -78,6 +78,8 @@ pub enum EntryValue {
     StringArray(Vec<String>),
     /// An entry value containing definition data for a RPC
     RPCDef(RPCDefinitionData),
+    /// Dummy entry value marking malformed RPC definition data
+    Pass,
 }
 
 impl ClientMessage for EntryType {
@@ -176,8 +178,8 @@ impl EntryType {
                 (EntryValue::StringArray(arr), bytes_read)
             }
             &EntryType::RPCDef => {
-                let (def, bytes) = RPCDefinitionData::decode(buf);
-                (EntryValue::RPCDef(def.unwrap()), bytes)
+                let (_, bytes) = RPCDefinitionData::decode(buf);
+                (EntryValue::Pass, bytes)
             }
         }
     }
@@ -230,7 +232,8 @@ impl EntryValue {
             EntryValue::BooleanArray(_) => EntryType::BooleanArray,
             EntryValue::DoubleArray(_) => EntryType::DoubleArray,
             EntryValue::StringArray(_) => EntryType::StringArray,
-            EntryValue::RPCDef(_) => EntryType::RPCDef
+            EntryValue::RPCDef(_) => EntryType::RPCDef,
+            EntryValue::Pass => EntryType::RPCDef
         }
     }
 }
