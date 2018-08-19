@@ -178,8 +178,14 @@ impl EntryType {
                 (EntryValue::StringArray(arr), bytes_read)
             }
             &EntryType::RPCDef => {
-                let (_, bytes) = RPCDefinitionData::decode(buf);
-                (EntryValue::Pass, bytes)
+                let (rpc, bytes) = RPCDefinitionData::decode(buf);
+                // Conditional to make sure we're not unwrapping nothing. The value from RPCDefinitionData
+                // will be none if we were sent a v0 RPC
+                if let None = rpc {
+                    (EntryValue::Pass, bytes)
+                }else {
+                    (EntryValue::RPCDef(rpc.unwrap()), bytes)
+                }
             }
         }
     }

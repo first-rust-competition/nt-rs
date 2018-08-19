@@ -5,16 +5,20 @@ use proc_macro2::{TokenStream, Span};
 use syn::{DeriveInput, Data, Fields, Ident};
 
 pub fn gen_client_packet_derive(input: DeriveInput) -> TokenStream {
-    let packet_id = util::parse_packet_id(input.attrs).unwrap();
+    let packet_id = util::parse_packet_id(input.attrs);
     let struct_ident = input.ident;
 
     let mut parts = Vec::new();
 
+    if let Some(id) = packet_id {
+        parts.push(quote! { buf.put_u8(#id); });
+    }
+
     if let Data::Struct(_struct) = input.data {
         if let Fields::Named(named_fields) = _struct.fields {
             for field in named_fields.named.into_iter() {
-                let ident = field.ident.unwrap().clone();
-                let ty_name = util::parse_type(&field.ty).unwrap();
+                let ident = field.ident.expect("ident").clone();
+                let ty_name = util::parse_type(&field.ty).expect("Type name");
                 let fn_name = name_for_ty(&ty_name.to_string());
                 let part = if let Some(func) = fn_name {
                     quote! {
@@ -34,7 +38,6 @@ pub fn gen_client_packet_derive(input: DeriveInput) -> TokenStream {
         impl ::nt_packet::ClientMessage for #struct_ident {
             fn encode(&self, buf: &mut ::bytes::BytesMut) {
                 use ::bytes::BufMut;
-                buf.put_u8(#packet_id);
                 #(#parts)*
             }
         }
