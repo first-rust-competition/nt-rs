@@ -1,5 +1,5 @@
-use bytes::{Buf, BufMut};
 use std::io::{Result, Error, ErrorKind};
+use bytes::Buf;
 
 /// Trait containing functions for reading integers from `Buf`
 /// Wraps existing functions, providing a safer API without panics
