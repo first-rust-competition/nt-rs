@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use nt_packet::{ClientMessage, ServerMessage};
 use super::Packet;
 
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 
 use super::try_decode;
 
@@ -47,13 +47,21 @@ impl Decoder for NTCodec {
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let mut buf = src.clone().freeze().into_buf();
-        let (packet, bytes_read) = try_decode(&mut buf, &self.state);
 
-        // This makes sure that a value was actually read successfully from the buffer, so that advancing the cursor is fine
-        if packet.is_some() {
-            src.advance(bytes_read);
+        if buf.remaining() < 1 {
+            return Ok(None);
         }
 
-        Ok(packet)
+        let decode_res = try_decode(&mut buf, &self.state);
+
+        let (packet, bytes_read) = match decode_res {
+            Ok(tuple) => tuple,
+            Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
+        };
+
+        // This makes sure that a value was actually read successfully from the buffer, so that advancing the cursor is fine
+        src.advance(bytes_read);
+
+        Ok(Some(packet))
     }
 }

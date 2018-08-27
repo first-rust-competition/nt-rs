@@ -33,7 +33,7 @@ impl EntryData {
             name,
             flags,
             value,
-            seqnum
+            seqnum,
         }
     }
 }
@@ -100,92 +100,87 @@ impl ClientMessage for EntryType {
 }
 
 impl ServerMessage for EntryType {
-    fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
-        let byte = buf.get_u8();
+    fn decode(mut buf: &mut Buf) -> Result<(Self, usize), ::failure::Error> {
+        let byte = buf.read_u8()?;
+        debug!("Got entry tag {}", byte);
         let this = match byte {
-            0x00 => Some(EntryType::Boolean),
-            0x01 => Some(EntryType::Double),
-            0x02 => Some(EntryType::String),
-            0x03 => Some(EntryType::RawData),
-            0x10 => Some(EntryType::BooleanArray),
-            0x11 => Some(EntryType::DoubleArray),
-            0x12 => Some(EntryType::StringArray),
-            0x20 => Some(EntryType::RPCDef),
-            _ => None
+            0x00 => EntryType::Boolean,
+            0x01 => EntryType::Double,
+            0x02 => EntryType::String,
+            0x03 => EntryType::RawData,
+            0x10 => EntryType::BooleanArray,
+            0x11 => EntryType::DoubleArray,
+            0x12 => EntryType::StringArray,
+            0x20 => EntryType::RPCDef,
+            _ => bail!("Invalid EntryType tag")
         };
-        (this, 1)
+        Ok((this, 1))
     }
 }
 
 impl EntryType {
     /// Deserializes an [`EntryValue`] of type `self` from the given `buf`
-    pub fn get_entry(&self, mut buf: &mut Buf) -> (EntryValue, usize) {
+    pub fn get_entry(&self, mut buf: &mut Buf) -> Result<(EntryValue, usize), ::failure::Error> {
         match self {
-            &EntryType::Boolean => (EntryValue::Boolean(buf.get_u8() == 1), 1),
-            &EntryType::Double => (EntryValue::Double(buf.get_f64_be()), 8),
+            &EntryType::Boolean => Ok((EntryValue::Boolean(buf.read_u8()? == 1), 1)),
+            &EntryType::Double => Ok((EntryValue::Double(buf.read_f64_be()?), 8)),
             &EntryType::String => {
-                let (value, bytes_read) = String::decode(buf);
-                (EntryValue::String(value.unwrap()), bytes_read)
+                let (value, bytes_read) = String::decode(buf)?;
+                Ok((EntryValue::String(value), bytes_read))
             }
             &EntryType::RawData => {
                 let (len, size) = buf.read_unsigned().unwrap();
                 let len = len as usize;
                 let mut data = vec![0u8; len];
                 buf.copy_to_slice(&mut data[..]);
-                (EntryValue::RawData(data), len + size)
+                Ok((EntryValue::RawData(data), len + size))
             }
             &EntryType::BooleanArray => {
                 let mut bytes_read = 0;
-                let len = buf.get_u8() as usize;
+                let len = buf.read_u8()? as usize;
                 bytes_read += 1;
                 let mut arr = vec![false; len];
 
                 for i in 0..len {
-                    let byte = buf.get_u8();
+                    let byte = buf.read_u8()?;
                     bytes_read += 1;
                     arr[i] = byte == 1;
                 }
 
-                (EntryValue::BooleanArray(arr), bytes_read)
+                Ok((EntryValue::BooleanArray(arr), bytes_read))
             }
             &EntryType::DoubleArray => {
                 let mut bytes_read = 0;
-                let len = buf.get_u8() as usize;
+                let len = buf.read_u8()? as usize;
                 bytes_read += 1;
                 let mut arr = vec![0f64; len];
 
                 for i in 0..len {
-                    let val = buf.get_f64_be();
+                    let val = buf.read_f64_be()?;
                     bytes_read += 8;
                     arr[i] = val;
                 }
 
-                (EntryValue::DoubleArray(arr), bytes_read)
+                Ok((EntryValue::DoubleArray(arr), bytes_read))
             }
             &EntryType::StringArray => {
                 let mut bytes_read = 0;
 
-                let len = buf.get_u8() as usize;
+                let len = buf.read_u8()? as usize;
                 bytes_read += 1;
                 let mut arr = Vec::with_capacity(len);
 
                 for i in 0..len {
-                    let (val, bytes) = String::decode(buf);
+                    let (val, bytes) = String::decode(buf)?;
                     bytes_read += bytes;
-                    arr[i] = val.unwrap();
+                    arr[i] = val;
                 }
 
-                (EntryValue::StringArray(arr), bytes_read)
+                Ok((EntryValue::StringArray(arr), bytes_read))
             }
             &EntryType::RPCDef => {
-                let (rpc, bytes) = RPCDefinitionData::decode(buf);
-                // Conditional to make sure we're not unwrapping nothing. The value from RPCDefinitionData
-                // will be none if we were sent a v0 RPC
-                if let None = rpc {
-                    (EntryValue::Pass, bytes)
-                }else {
-                    (EntryValue::RPCDef(rpc.unwrap()), bytes)
-                }
+                let (rpc, bytes) = RPCDefinitionData::decode(buf)?;
+                Ok((EntryValue::RPCDef(rpc), bytes))
             }
         }
     }

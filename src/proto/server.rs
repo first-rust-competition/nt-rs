@@ -1,3 +1,4 @@
+use nt_packet::BufExt;
 
 /// Represents NT packet 0x02 Protocol Version Unsupported
 /// Sent by a server when a Client Hello packet (ID 0x01) contains an unsupported NT revision

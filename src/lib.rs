@@ -17,6 +17,7 @@ extern crate bytes;
 extern crate nt_packet;
 #[macro_use]
 extern crate nt_packet_derive;
+#[macro_use]
 extern crate failure;
 #[macro_use]
 extern crate log;

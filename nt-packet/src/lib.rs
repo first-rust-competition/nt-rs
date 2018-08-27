@@ -10,6 +10,11 @@
 
 extern crate bytes;
 extern crate nt_leb128 as leb128;
+extern crate failure;
+
+mod ext;
+
+pub use self::ext::BufExt;
 
 use bytes::{Buf, BytesMut, BufMut};
 
@@ -23,12 +28,13 @@ pub trait ClientMessage: Send {
 }
 
 /// Trait representing an NT message/packet headed Server --> Client
-pub trait ServerMessage {
+pub trait ServerMessage: Sized {
     /// Attempts to decode `Self` from the given `buf`
     /// Returns Some if the given `buf` was a valid NT packet
     /// Returns None if the given `buf` was malformed, or otherwise invalid
-    fn decode(buf: &mut Buf) -> (Option<Self>, usize)
-        where Self: Sized;
+//    fn decode(buf: &mut Buf) -> (Option<Self>, usize)
+//        where Self: Sized;
+    fn decode(buf: &mut Buf) -> Result<(Self, usize), failure::Error>;
 }
 
 impl ClientMessage for String {
@@ -39,11 +45,41 @@ impl ClientMessage for String {
 }
 
 impl ServerMessage for String {
-    fn decode(mut buf: &mut Buf) -> (Option<Self>, usize) {
-        let (len, bytes_read) = buf.read_unsigned().unwrap();
+    //    fn decode(mut buf: &mut Buf) -> (Option<Self>, usize) {
+//        let (len, bytes_read) = buf.read_unsigned().unwrap();
+//        let len = len as usize;
+//        let mut strbuf = vec![0; len];
+//        buf.copy_to_slice(&mut strbuf[..]);
+//        (Some(::std::string::String::from_utf8(strbuf).unwrap()), len + bytes_read)
+//    }
+    fn decode(mut buf: &mut Buf) -> Result<(Self, usize), failure::Error> {
+        let (len, bytes_read) = buf.read_unsigned()?;
         let len = len as usize;
+//        let mut strbuf = Vec::with_capacity(len);
+//        println!("DBG: String length is {}", len);
         let mut strbuf = vec![0; len];
         buf.copy_to_slice(&mut strbuf[..]);
-        (Some(::std::string::String::from_utf8(strbuf).unwrap()), len + bytes_read)
+        Ok((String::from_utf8(strbuf)?, len + bytes_read))
+    }
+}
+
+impl ClientMessage for Vec<u8> {
+    fn encode(&self, buf: &mut BytesMut) {
+        buf.write_unsigned(self.len() as u64).unwrap();
+        buf.extend_from_slice(&self[..]);
+    }
+}
+
+impl<T> ClientMessage for Vec<T>
+    where T: ClientMessage
+{
+    fn encode(&self, buf: &mut BytesMut) {
+        let mut bytes = BytesMut::new();
+        for item in self {
+            item.encode(&mut bytes);
+        }
+
+        buf.write_unsigned(bytes.len() as u64).unwrap();
+        buf.extend(bytes);
     }
 }

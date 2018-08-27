@@ -14,14 +14,10 @@ use nt_packet::*;
 use self::server::*;
 
 /// Represents an attempt to decode a `ServerMessage` from the given `buf`
-pub fn try_decode(buf: &mut Buf, _state: &Arc<Mutex<State>>) -> (Option<Packet>, usize) {
+pub fn try_decode(mut buf: &mut Buf, _state: &Arc<Mutex<State>>) -> Result<(Packet, usize), ::failure::Error> {
     use self::server::*;
-    // Safety net to not read if there's nothing there
-    if buf.remaining() < 1 {
-        return (None, 0);
-    }
 
-    let id = buf.get_u8();
+    let id = buf.read_u8()?;
 
     // The total bytes read, will differ with the different types of packets that are read.
     // Updated appropriately in the `match` so that the caller can update the byte source accordingly
@@ -29,58 +25,62 @@ pub fn try_decode(buf: &mut Buf, _state: &Arc<Mutex<State>>) -> (Option<Packet>,
 
     let packet = match id {
         0x00 => {
-            let (packet, bytes_read) = KeepAlive::decode(buf);
+            let (packet, bytes_read) = KeepAlive::decode(buf)?;
             bytes += bytes_read;
-            Some(Packet::KeepAlive(packet.unwrap()))
+            Some(Packet::KeepAlive(packet))
         }
         0x02 => {
-            let (packet, bytes_read) = ProtocolVersionUnsupported::decode(buf);
+            let (packet, bytes_read) = ProtocolVersionUnsupported::decode(buf)?;
             bytes += bytes_read;
-            Some(Packet::ProtocolVersionUnsupported(packet.unwrap()))
+            Some(Packet::ProtocolVersionUnsupported(packet))
         }
         0x04 => {
-            let (packet, bytes_read) = ServerHello::decode(buf);
+            let (packet, bytes_read) = ServerHello::decode(buf)?;
             bytes += bytes_read;
-            Some(Packet::ServerHello(packet.unwrap()))
+            Some(Packet::ServerHello(packet))
         }
         0x03 => {
-            let (packet, bytes_read) = ServerHelloComplete::decode(buf);
+            let (packet, bytes_read) = ServerHelloComplete::decode(buf)?;
             bytes += bytes_read;
-            Some(Packet::ServerHelloComplete(packet.unwrap()))
+            Some(Packet::ServerHelloComplete(packet))
         }
         0x10 => {
-            let (packet, bytes_read) = EntryAssignment::decode(buf);
+            let (packet, bytes_read) = EntryAssignment::decode(buf)?;
             bytes += bytes_read;
-            let packet = packet.unwrap();
             Some(Packet::EntryAssignment(packet))
         }
         0x13 => {
-            let (packet, bytes_read) = EntryDelete::decode(buf);
+            let (packet, bytes_read) = EntryDelete::decode(buf)?;
             bytes += bytes_read;
-            Some(Packet::EntryDelete(packet.unwrap()))
+            Some(Packet::EntryDelete(packet))
         }
         0x11 => {
-            let (packet, bytes_read) = EntryUpdate::decode(buf);
+            let (packet, bytes_read) = EntryUpdate::decode(buf)?;
             bytes += bytes_read;
-            Some(Packet::EntryUpdate(packet.unwrap()))
+            Some(Packet::EntryUpdate(packet))
         }
         0x12 => {
-            let (packet, bytes_read) = EntryFlagsUpdate::decode(buf);
+            let (packet, bytes_read) = EntryFlagsUpdate::decode(buf)?;
             bytes += bytes_read;
-            Some(Packet::EntryFlagsUpdate(packet.unwrap()))
+            Some(Packet::EntryFlagsUpdate(packet))
         }
         0x14 => {
-            let (packet, bytes_read) = DeleteAllEntries::decode(buf);
+            let (packet, bytes_read) = DeleteAllEntries::decode(buf)?;
             bytes += bytes_read;
-            Some(Packet::DeleteAllEntries(packet.unwrap()))
+            Some(Packet::DeleteAllEntries(packet))
         }
         _ => None
     };
+    let packet = match packet {
+        Some(packet) => packet,
+        None => bail!("Invalid packet received"),
+    };
 
-    (packet, bytes)
+    Ok((packet, bytes))
 }
 
 /// Enum wrapping `ServerMessage` types
+#[derive(Debug)]
 pub enum Packet {
     KeepAlive(KeepAlive),
     ProtocolVersionUnsupported(ProtocolVersionUnsupported),
@@ -139,24 +139,23 @@ pub struct EntryUpdate {
 }
 
 impl ServerMessage for EntryUpdate {
-    fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
+    fn decode(mut buf: &mut Buf) -> Result<(Self, usize), ::failure::Error> {
         let mut bytes_read = 0;
-        let entry_id = buf.get_u16_be();
+        let entry_id = buf.read_u16_be()?;
         bytes_read += 2;
-        let entry_sequence_num = buf.get_u16_be();
+        let entry_sequence_num = buf.read_u16_be()?;
         bytes_read += 2;
-        let (et, bytes) = EntryType::decode(buf);
+        let (entry_type, bytes) = EntryType::decode(buf)?;
         bytes_read += bytes;
-        let entry_type = et.unwrap();
-        let (entry_value, bytes) = entry_type.get_entry(buf);
+        let (entry_value, bytes) = entry_type.get_entry(buf)?;
         bytes_read += bytes;
 
-        (Some(EntryUpdate {
+        Ok((EntryUpdate {
             entry_id,
             entry_sequence_num,
             entry_type,
             entry_value,
-        }), bytes_read)
+        }, bytes_read))
     }
 }
 
@@ -187,41 +186,41 @@ impl EntryAssignment {
 }
 
 impl ServerMessage for EntryAssignment {
-    fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
+    fn decode(mut buf: &mut Buf) -> Result<(Self, usize), ::failure::Error> {
         // Tally of the total bytes read from `buf` to decode this packet
         let mut bytes_read = 0;
 
         let entry_name = {
-            let (s, bytes) = String::decode(buf);
+            let (s, bytes) = String::decode(buf)?;
             bytes_read += bytes;
-            s.unwrap()
+            s
         };
 
         let entry_type = {
-            let (et, bytes) = EntryType::decode(buf);
+            let (et, bytes) = EntryType::decode(buf)?;
             bytes_read += bytes;
-            et.unwrap()
+            et
         };
 
-        let entry_id = buf.get_u16_be();
+        let entry_id = buf.read_u16_be()?;
         bytes_read += 2;
 
-        let entry_sequence_num = buf.get_u16_be();
+        let entry_sequence_num = buf.read_u16_be()?;
         bytes_read += 2;
 
-        let entry_flags = buf.get_u8();
+        let entry_flags = buf.read_u8()?;
         bytes_read += 1;
 
-        let (entry_value, bytes) = entry_type.get_entry(buf);
+        let (entry_value, bytes) = entry_type.get_entry(buf)?;
         bytes_read += bytes;
 
-        (Some(EntryAssignment {
+        Ok((EntryAssignment {
             entry_name,
             entry_type,
             entry_id,
             entry_sequence_num,
             entry_flags,
             entry_value,
-        }), bytes_read)
+        }, bytes_read))
     }
 }

@@ -1,6 +1,6 @@
 [package]
 name = "nt-packet"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Rhys Kenwell <redrield@gmail.com>"]
 
 description = "Crate containing traits core to nt-rs"
@@ -9,6 +9,7 @@ repository = "https://gitlab.com/Redrield/nt-rs"
 
 [dependencies]
 bytes = "0.4.9"
+failure = "0.1.2"
 
 [dependencies.nt-leb128]
 version = "0.2.4"
