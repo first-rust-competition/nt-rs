@@ -5,7 +5,7 @@ authors = ["Redrield <redrield@gmail.com>"]
 
 description = "Crate containing proc macro derives for nt-rs"
 license = "MIT"
-repository = "htps://gitlab.com/Redrield/nt-rs"
+repository = "https://gitlab.com/Redrield/nt-rs"
 
 [lib]
 proc-macro = true
