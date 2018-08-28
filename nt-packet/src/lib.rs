@@ -32,8 +32,6 @@ pub trait ServerMessage: Sized {
     /// Attempts to decode `Self` from the given `buf`
     /// Returns Some if the given `buf` was a valid NT packet
     /// Returns None if the given `buf` was malformed, or otherwise invalid
-//    fn decode(buf: &mut Buf) -> (Option<Self>, usize)
-//        where Self: Sized;
     fn decode(buf: &mut Buf) -> Result<(Self, usize), failure::Error>;
 }
 
@@ -45,18 +43,9 @@ impl ClientMessage for String {
 }
 
 impl ServerMessage for String {
-    //    fn decode(mut buf: &mut Buf) -> (Option<Self>, usize) {
-//        let (len, bytes_read) = buf.read_unsigned().unwrap();
-//        let len = len as usize;
-//        let mut strbuf = vec![0; len];
-//        buf.copy_to_slice(&mut strbuf[..]);
-//        (Some(::std::string::String::from_utf8(strbuf).unwrap()), len + bytes_read)
-//    }
     fn decode(mut buf: &mut Buf) -> Result<(Self, usize), failure::Error> {
         let (len, bytes_read) = buf.read_unsigned()?;
         let len = len as usize;
-//        let mut strbuf = Vec::with_capacity(len);
-//        println!("DBG: String length is {}", len);
         let mut strbuf = vec![0; len];
         buf.copy_to_slice(&mut strbuf[..]);
         Ok((String::from_utf8(strbuf)?, len + bytes_read))
@@ -81,5 +70,49 @@ impl<T> ClientMessage for Vec<T>
 
         buf.write_unsigned(bytes.len() as u64).unwrap();
         buf.extend(bytes);
+    }
+}
+
+impl<T> ServerMessage for Vec<T>
+    where T: ServerMessage
+{
+    fn decode(mut buf: &mut Buf) -> Result<(Self, usize), failure::Error> {
+        let mut bytes_read = 0;
+        let len = {
+            let (len, bytes) = buf.read_unsigned()?;
+
+            bytes_read += bytes;
+
+            len as usize
+        };
+
+        let mut vec = Vec::with_capacity(len as usize);
+        for i in 0..len {
+            let (t, bytes) = T::decode(buf)?;
+            bytes_read += bytes;
+            vec[i as usize] = t;
+        }
+
+        Ok((vec, bytes_read))
+    }
+}
+
+impl ServerMessage for Vec<u8> {
+    fn decode(mut buf: &mut Buf) -> Result<(Self, usize), failure::Error> {
+        let mut bytes_read = 0;
+        let len = {
+            let (len, bytes) = buf.read_unsigned()?;
+
+            bytes_read += bytes;
+            len as usize
+        };
+        let mut vec = vec![0; len];
+
+        for i in 0..len {
+            vec[i] = buf.read_u8()?;
+            bytes_read += 1;
+        }
+
+        Ok((vec, bytes_read))
     }
 }
