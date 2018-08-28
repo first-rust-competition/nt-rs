@@ -64,7 +64,8 @@ pub struct State {
     entries: HashMap<u16, EntryData>,
     handle: Option<Box<Remote>>,
     pending_entries: Vec<(EntryData, Sender<u16>)>,
-    callbacks: MultiMap<CallbackType, Box<Action>>
+    callbacks: MultiMap<CallbackType, Box<Action>>,
+    rpc_unique_id: u16,
 }
 
 impl State {
@@ -75,13 +76,20 @@ impl State {
             entries: HashMap::new(),
             handle: None,
             pending_entries: Vec::new(),
-            callbacks: MultiMap::new()
+            callbacks: MultiMap::new(),
+            rpc_unique_id: 0
         }
     }
 
     #[doc(hidden)]
     pub(crate) fn set_handle(&mut self, handle: Remote) {
         self.handle = Some(Box::new(handle));
+    }
+
+    pub(crate) fn call_rpc(&mut self, def: EntryData) {
+        if let ConnectionState::Connected(ref tx) = self.connection_state {
+
+        }
     }
 
     /// Called internally from [`NetworkTables`](struct.NetworkTables.html) to create a new entry on the server.
