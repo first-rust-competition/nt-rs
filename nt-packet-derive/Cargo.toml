@@ -1,6 +1,6 @@
 [package]
 name = "nt-packet-derive"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Redrield <redrield@gmail.com>"]
 
 description = "Crate containing proc macro derives for nt-rs"
@@ -11,7 +11,7 @@ repository = "https://gitlab.com/Redrield/nt-rs"
 proc-macro = true
 
 [dependencies]
-nt-packet = "0.1.1"
+nt-packet = "0.1.2"
 syn = "0.14.7"
 quote = "0.6.5"
 proc-macro2 = "0.4.9"

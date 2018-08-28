@@ -23,7 +23,7 @@ pub fn gen_server_packet_derive(input: DeriveInput) -> TokenStream {
                 } else {
                     quote! {
                         let #ident = {
-                            let (a, b) = <#ty_name as ::nt_packet::ServerMessage>::decode(buf)?;
+                            let (a, b) = ::nt_packet::ServerMessage::decode(buf)?;
                             bytes_read += b;
                             a
                         };
