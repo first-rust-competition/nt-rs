@@ -1,3 +1,4 @@
+#![allow(unused)] // TODO: Get rid of this once RPC is implemented
 use super::*;
 use nt::state::State;
 
@@ -26,8 +27,8 @@ impl ClientMessage for RPCExecutionBody {
 }
 
 impl RPCResponseBody {
-    pub fn decode(mut buf: &mut Buf, state: &Arc<Mutex<State>>) -> Result<(Self, usize), ::failure::Error> {
-        let mut bytes_read = 0;
+    pub fn decode(mut _buf: &mut Buf, _state: &Arc<Mutex<State>>) -> Result<(Self, usize), ::failure::Error> {
+//        let mut bytes_read = 0;
         unimplemented!()
     }
 }

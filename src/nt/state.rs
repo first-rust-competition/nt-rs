@@ -65,6 +65,7 @@ pub struct State {
     handle: Option<Box<Remote>>,
     pending_entries: Vec<(EntryData, Sender<u16>)>,
     callbacks: MultiMap<CallbackType, Box<Action>>,
+    #[allow(unused)] //TODO: Get rid of this when RPC is implemented
     rpc_unique_id: u16,
 }
 
@@ -86,6 +87,7 @@ impl State {
         self.handle = Some(Box::new(handle));
     }
 
+    #[allow(unused)] //TODO: Get rid of this when RPC is implemented
     pub(crate) fn call_rpc(&mut self, def: EntryData) {
         if let ConnectionState::Connected(ref tx) = self.connection_state {
 

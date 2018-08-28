@@ -1,12 +1,5 @@
-use nt_packet::{ClientMessage, ServerMessage};
-use proto::types::rpc::{Parameter, RPCExecutionBody};
-use leb128::LEB128Write;
-use nt::state::State;
-
-use std::sync::{Arc, Mutex};
-use failure;
-
-use bytes::{BytesMut, BufMut, Buf};
+#![allow(unused)] // TODO: Get rid of this when RPC is implemented
+use proto::types::rpc::RPCExecutionBody;
 
 #[derive(ClientMessage, new)]
 #[packet_id = 0x20]
