@@ -9,11 +9,13 @@ use tokio_core::reactor::Core;
 use nt_packet::ClientMessage;
 use proto::*;
 use proto::types::*;
+use proto::types::rpc::{RPCResponseBody, RPCExecutionBody};
 
 use std::sync::{Arc, Mutex};
-use std::io::{Error, ErrorKind};
 use std::thread;
 use std::collections::HashMap;
+
+use failure::{Error, err_msg};
 
 pub(crate) mod state;
 mod conn;
@@ -34,6 +36,18 @@ pub struct NetworkTables {
     /// Contains the initial connection future with a reference to the framed NT codec
     state: Arc<Mutex<State>>,
     end_tx: Sender<()>,
+}
+
+/// Handle to the reactor backing a given `NetworkTables`
+pub struct Handle {
+    end_tx: Sender<()>
+}
+
+impl Handle {
+    /// Instructs the backing reactor to disconnect from the remote
+    pub fn disconnect(&mut self) {
+        self.end_tx.clone().send(()).wait().unwrap();
+    }
 }
 
 impl NetworkTables {
@@ -70,6 +84,27 @@ impl NetworkTables {
             state,
             end_tx,
         })
+    }
+
+    /// Returns a handle to this client
+    /// Allows indirect termination of the remote connection without moving `self` into closures
+    pub fn handle(&self) -> Handle {
+        Handle {
+            end_tx: self.end_tx.clone()
+        }
+    }
+
+    /// Initiates an RPC request for the given id.
+    /// `cb` will be called with the response body when the server has processed the request and returned
+    pub fn call_rpc<F>(&mut self, id: u16, args: RPCExecutionBody, cb: F) -> Result<(), ::failure::Error>
+        where F: FnOnce(RPCResponseBody) + Send + 'static
+    {
+        let entry = self.get_entry(id);
+        ensure!(entry.value().entry_type() == EntryType::RPCDef, "The given entry must be of type RPCDef");
+        let mut state = self.state.lock().unwrap();
+        state.call_rpc(entry, args, cb);
+
+        Ok(())
     }
 
     /// Registers the given closure `cb` as a callback to be called for [`CallbackType`] `action`
@@ -138,7 +173,8 @@ impl NetworkTables {
 
 impl Drop for NetworkTables {
     fn drop(&mut self) {
-        self.end_tx.clone().send(()).wait().unwrap();
+        // Don't explicitly unwrap the error. Handle.disconnect performs the same action, which will drop the read half of this Channel
+        self.end_tx.clone().send(()).wait();
     }
 }
 
@@ -155,18 +191,22 @@ pub fn poll_socket(state: Arc<Mutex<State>>, rx: impl Stream<Item=Packet, Error=
     debug!("Spawned socket poll");
 
     // This function will be called as new packets arrive. Has to be `fold` to maintain ownership over the write half of our codec
-    rx.map(Either::A).select(end_rx.map(Either::B).map_err(|_| Error::new(ErrorKind::Other, "Error encountered from closing channel")))
+    rx.map(Either::A).select(end_rx.map(Either::B).map_err(|_| err_msg("Error from termination channel")))
         .fold(tx, move |tx, packet| {
             match packet {
-                Either::A(packet) => match handle_packet(packet, state.clone(), tx.clone()) {
-                    Ok(Some(packet)) => Either::A(tx.send(packet).map_err(|e| Error::new(ErrorKind::Other, format!("{}", e)))),
+                Either::A(packet) => match handle_packet(packet, &state, tx.clone()) {
+                    Ok(Some(packet)) => Either::A(tx.send(packet).map_err(|e| err_msg(format!("{}", e)))),
                     Ok(None) => Either::B(ok(tx)),
-                    Err(e) => Either::B(err(e)),
+                    Err(e) => Either::B(err(e.into())),
                 }
-                Either::B(_) => Either::B(err(Error::new(ErrorKind::Other, "NetworkTables dropped")))
+                Either::B(_) => Either::B(err(err_msg("NetworkTables dropped or disconnected.")))
             }
         })
         .map_err(|e| {
+            if &format!("{}", e) == "NetworkTables dropped or disconnected." {
+                info!("Remote socket closed.");
+                return e;
+            }
             error!("handle_packet encountered an error: {}", e);
             e
         })

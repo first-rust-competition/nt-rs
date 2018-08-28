@@ -5,6 +5,7 @@ pub mod codec;
 pub mod rpc;
 
 use self::types::*;
+use self::rpc::RPCResponse;
 use nt::state::State;
 
 use std::sync::{Arc, Mutex};
@@ -14,7 +15,7 @@ use nt_packet::*;
 use self::server::*;
 
 /// Represents an attempt to decode a `ServerMessage` from the given `buf`
-pub fn try_decode(mut buf: &mut Buf, _state: &Arc<Mutex<State>>) -> Result<(Packet, usize), ::failure::Error> {
+pub fn try_decode(mut buf: &mut Buf, state: &Arc<Mutex<State>>) -> Result<(Packet, usize), ::failure::Error> {
     use self::server::*;
 
     let id = buf.read_u8()?;
@@ -69,6 +70,11 @@ pub fn try_decode(mut buf: &mut Buf, _state: &Arc<Mutex<State>>) -> Result<(Pack
             bytes += bytes_read;
             Some(Packet::DeleteAllEntries(packet))
         }
+        0x21 => {
+            let (packet, bytes_read) = RPCResponse::decode(buf, state)?;
+            bytes += bytes_read;
+            Some(Packet::RpcResponse(packet))
+        }
         _ => None
     };
     let packet = match packet {
@@ -91,6 +97,7 @@ pub enum Packet {
     EntryUpdate(EntryUpdate),
     EntryFlagsUpdate(EntryFlagsUpdate),
     DeleteAllEntries(DeleteAllEntries),
+    RpcResponse(RPCResponse),
 }
 
 /// Represents NT Packet 0x00 Keep Alive

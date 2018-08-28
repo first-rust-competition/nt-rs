@@ -8,7 +8,7 @@ use nt_packet::ClientMessage;
 use proto::Packet;
 use proto::client::*;
 
-pub fn handle_packet(packet: Packet, state: Arc<Mutex<State>>, tx: Sender<Box<ClientMessage>>) -> Result<Option<Box<ClientMessage>>, Error> {
+pub fn handle_packet(packet: Packet, state: &Arc<Mutex<State>>, tx: Sender<Box<ClientMessage>>) -> Result<Option<Box<ClientMessage>>, Error> {
     match packet {
         Packet::ServerHello(packet) => {
             debug!("Got server hello: {:?}", packet);
@@ -57,6 +57,12 @@ pub fn handle_packet(packet: Packet, state: Arc<Mutex<State>>, tx: Sender<Box<Cl
             let mut state = state.lock().unwrap();
 
             state.handle_flags_updated(update);
+
+            Ok(None)
+        }
+        Packet::RpcResponse(res) => {
+            let mut state = state.lock().unwrap();
+            state.handle_rpc_ret(res);
 
             Ok(None)
         }

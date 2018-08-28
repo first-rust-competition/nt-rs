@@ -33,6 +33,7 @@ impl Connection {
         let err_state = state.clone();
         let codec_state = state.clone();
         let future = TcpStream::connect(target)
+            .map_err(|e| ::failure::Error::from(e))
             .and_then(move |sock| {
                 let codec = NTCodec::new(codec_state.clone()).framed(sock);
                 codec.send(Box::new(ClientHello::new(::NT_PROTOCOL_REV, client_name)))

@@ -35,5 +35,5 @@ mod nt;
 /// Base result type for nt-rs
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
-pub use self::proto::types::{EntryData, EntryValue, EntryType};
+pub use self::proto::types::{EntryData, EntryValue, EntryType, rpc::*};
 pub use self::nt::*;

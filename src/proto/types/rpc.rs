@@ -1,6 +1,4 @@
-#![allow(unused)]
-
-// TODO: Get rid of this once RPC is implemented
+#![allow(missing_docs)] //TODO: Get rid of this when I can
 use super::*;
 use nt::state::State;
 
@@ -14,6 +12,7 @@ pub enum RPCExecutionBody {
     V0(RPCV0ExecuteBody),
 }
 
+#[derive(Debug)]
 pub enum RPCResponseBody {
     V1(RPCV1ResponseBody),
     V0(RPCV0ResponseBody),
@@ -29,25 +28,45 @@ impl ClientMessage for RPCExecutionBody {
 }
 
 impl RPCResponseBody {
-    fn decode(buf: &mut Buf, ver: u8) -> Result<(Self, usize), ::failure::Error> {
-        if ver == 0x00 {
-            RPCV0ResponseBody::decode(buf).map(|(body, bytes)| (RPCResponseBody::V0(body), bytes))
-        } else if ver == 0x01 {
-            RPCV1ResponseBody::decode(buf).map(|(body, bytes)| (RPCResponseBody::V1(body), bytes))
-        } else {
-            bail!("Invalid RPC version: {}", ver);
+    //noinspection ALL (typechecking broken in intellij-rust for custom derives. Disable to get rid of annoying errors)
+    pub fn decode(mut buf: &mut Buf, rpc: RPCDefinitionData) -> Result<(Self, usize), ::failure::Error> {
+        match rpc.version {
+            0x00 => RPCV0ResponseBody::decode(buf).map(|(body, bytes)| (RPCResponseBody::V0(body), bytes)),
+            0x01 => RPCV1ResponseBody::decode(buf, rpc).map(|(body, bytes)| (RPCResponseBody::V1(body), bytes)),
+            _ => bail!("Invalid RPC version: {}", rpc.version),
         }
     }
 }
 
-#[derive(ServerMessage)]
+#[derive(ServerMessage, Debug)]
 pub struct RPCV0ResponseBody {
     pub bytes: Vec<u8>
 }
 
-#[derive(ServerMessage)]
+#[derive(Debug)]
 pub struct RPCV1ResponseBody {
-    pub results: Vec<RpcResult>,
+    pub values: Vec<EntryValue>
+}
+
+impl RPCV1ResponseBody {
+    fn decode(mut buf: &mut Buf, rpc: RPCDefinitionData) -> Result<(Self, usize), ::failure::Error> {
+        let mut bytes_read = 0;
+        {
+            let (l, bytes) = buf.read_unsigned()?;
+            bytes_read += bytes;
+        }
+
+        let mut results = Vec::with_capacity(rpc.result_size);
+
+        for i in 0..rpc.result_size {
+            let mut result = &rpc.results[i];
+            let (res, bytes) = result.result_type.get_entry(buf)?;
+            bytes_read += bytes;
+            results.push(res);
+        }
+
+        Ok((RPCV1ResponseBody { values: results }, bytes_read))
+    }
 }
 
 #[derive(ClientMessage, new)]
@@ -62,12 +81,12 @@ pub struct RPCV0ExecuteBody {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RPCDefinitionData {
-    version: u8,
-    procedure_name: String,
-    parameters_size: usize,
-    parameters: Vec<Parameter>,
-    result_size: usize,
-    results: Vec<RpcResult>,
+    pub version: u8,
+    pub procedure_name: String,
+    pub parameters_size: usize,
+    pub parameters: Vec<Parameter>,
+    pub result_size: usize,
+    pub results: Vec<RpcResult>,
 }
 
 #[derive(Debug, Clone, PartialEq, ClientMessage)]
