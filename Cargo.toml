@@ -1,6 +1,6 @@
 [package]
 name = "nt"
-version = "0.2.5"
+version = "0.2.6"
 authors = ["Redrield <redrield@gmail.com>"]
 
 description = "A NetworkTables revision 3 client library for Rust"
@@ -10,8 +10,8 @@ repository = "https://gitlab.com/Redrield/nt-rs"
 [dependencies]
 tokio = "0.1.7"
 bytes = "0.4.9"
-nt-packet = "0.1.1"
-nt-packet-derive = "0.1.3"
+nt-packet = "0.1.2"
+nt-packet-derive = "0.1.4"
 failure = "0.1.2"
 tokio-codec = "0.1.0"
 futures = "0.1.23"

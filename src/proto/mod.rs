@@ -122,7 +122,7 @@ impl DeleteAllEntries {
     }
 }
 
-#[derive(Debug, ClientMessage, ServerMessage, new)]
+#[derive(Debug,Clone, ClientMessage, ServerMessage, new)]
 #[packet_id = 0x12]
 pub struct EntryFlagsUpdate {
     pub entry_id: u16,

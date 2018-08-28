@@ -40,12 +40,12 @@ impl RPCResponseBody {
 //    }
 //}
 
-//#[derive(ServerMessage)]
+#[derive(ServerMessage)]
 pub struct RPCV0ResponseBody {
     pub bytes: Vec<u8>
 }
 
-//#[derive(ServerMessage)]
+#[derive(ServerMessage)]
 pub struct RPCV1ResponseBody {
     pub results: Vec<RpcResult>,
 }

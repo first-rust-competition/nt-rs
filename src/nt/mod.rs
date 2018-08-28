@@ -33,7 +33,7 @@ pub use self::callback::CallbackType;
 pub struct NetworkTables {
     /// Contains the initial connection future with a reference to the framed NT codec
     state: Arc<Mutex<State>>,
-    end_tx: Sender<()>
+    end_tx: Sender<()>,
 }
 
 impl NetworkTables {
@@ -68,7 +68,7 @@ impl NetworkTables {
 
         Ok(NetworkTables {
             state,
-            end_tx
+            end_tx,
         })
     }
 
@@ -146,8 +146,7 @@ impl Drop for NetworkTables {
 pub(crate) fn send_packets(tx: impl Sink<SinkItem=Box<ClientMessage>, SinkError=Error>, rx: Receiver<Box<ClientMessage>>) -> impl Future<Item=(), Error=()> {
     debug!("Spawned packet send loop");
     rx
-        .fold(tx, |tx, packet| tx.send(packet)
-            .map_err(|e| error!("Packet sender encountered an error: {}", e)))
+        .fold(tx, |tx, packet| tx.send(packet).map_err(|e| error!("Packet sender encountered an error: {}", e)))
         .map(drop)
 }
 

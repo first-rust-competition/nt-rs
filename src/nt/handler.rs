@@ -55,8 +55,8 @@ pub fn handle_packet(packet: Packet, state: Arc<Mutex<State>>, tx: Sender<Box<Cl
         }
         Packet::EntryFlagsUpdate(update) => {
             let mut state = state.lock().unwrap();
-            let entry = state.get_entry_mut(update.entry_id);
-            entry.flags = update.entry_flags;
+
+            state.handle_flags_updated(update);
 
             Ok(None)
         }

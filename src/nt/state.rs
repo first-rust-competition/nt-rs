@@ -188,10 +188,14 @@ impl State {
         self.entries.insert(info.entry_id, data);
     }
 
+    pub(crate) fn handle_flags_updated(&mut self, flags_update: EntryFlagsUpdate) {
+        let entry = self.get_entry_mut(flags_update.entry_id);
+        entry.flags = flags_update.entry_flags;
+    }
+
     /// Called internally to update the value of an entry
     pub(crate) fn handle_entry_updated(&mut self, update: EntryUpdate) {
         let old_entry = self.get_entry_mut(update.entry_id);
-
 
         if update.entry_sequence_num != old_entry.seqnum + 1 {
             return;
@@ -229,8 +233,7 @@ impl State {
         if let ConnectionState::Connected(tx) = self.connection_state.clone() {
             self.entries.remove(&key);
             let delete = EntryDelete::new(key);
-            self.handle.clone().unwrap().spawn(move |_|
-                tx.send(Box::new(delete)).then(|_| Ok(())));
+            tx.send(Box::new(delete)).wait().unwrap();
         }
     }
 
@@ -239,8 +242,7 @@ impl State {
     pub(crate) fn delete_all_entries(&mut self) {
         if let ConnectionState::Connected(tx) = self.connection_state.clone() {
             let packet = DeleteAllEntries::new();
-            self.handle.clone().unwrap().spawn(move |_|
-                tx.send(Box::new(packet)).then(|_| Ok(())))
+            tx.send(Box::new(packet)).wait().unwrap();
         }
     }
 
@@ -260,8 +262,8 @@ impl State {
     pub(crate) fn update_entry_flags(&mut self, id: u16, flags: u8) {
         if let ConnectionState::Connected(tx) = self.connection_state.clone() {
             let packet = EntryFlagsUpdate::new(id, flags);
-            self.handle.clone().unwrap().spawn(move |_|
-                tx.send(Box::new(packet)).then(|_| Ok(())));
+            self.handle_flags_updated(packet.clone());
+            tx.send(Box::new(packet)).wait().unwrap();
         }
     }
 
