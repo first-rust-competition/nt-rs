@@ -1,4 +1,6 @@
-#![allow(unused)] // TODO: Get rid of this once RPC is implemented
+#![allow(unused)]
+
+// TODO: Get rid of this once RPC is implemented
 use super::*;
 use nt::state::State;
 
@@ -9,7 +11,7 @@ use leb128::LEB128Read;
 
 pub enum RPCExecutionBody {
     V1(RPCV1ExecuteBody),
-    V0(RPCV0ExecuteBody)
+    V0(RPCV0ExecuteBody),
 }
 
 pub enum RPCResponseBody {
@@ -27,18 +29,16 @@ impl ClientMessage for RPCExecutionBody {
 }
 
 impl RPCResponseBody {
-    pub fn decode(mut _buf: &mut Buf, _state: &Arc<Mutex<State>>) -> Result<(Self, usize), ::failure::Error> {
-//        let mut bytes_read = 0;
-        unimplemented!()
+    fn decode(buf: &mut Buf, ver: u8) -> Result<(Self, usize), ::failure::Error> {
+        if ver == 0x00 {
+            RPCV0ResponseBody::decode(buf).map(|(body, bytes)| (RPCResponseBody::V0(body), bytes))
+        } else if ver == 0x01 {
+            RPCV1ResponseBody::decode(buf).map(|(body, bytes)| (RPCResponseBody::V1(body), bytes))
+        } else {
+            bail!("Invalid RPC version: {}", ver);
+        }
     }
 }
-
-//impl ServerMessage for RPCResponseBody {
-//    fn decode(buf: &mut Buf) -> (Option<Self>, usize) {
-//        let mut bytes_read = 0;
-//
-//    }
-//}
 
 #[derive(ServerMessage)]
 pub struct RPCV0ResponseBody {
@@ -129,8 +129,14 @@ impl ServerMessage for RPCDefinitionData {
         bytes_read += 1;
 
         if ver == 0x00 {
-            return Ok((RPCDefinitionData { version: ver, procedure_name: "".to_string(), result_size: 0,
-                parameters_size: 0, results: Vec::new(), parameters: Vec::new() }, bytes_read));
+            return Ok((RPCDefinitionData {
+                version: ver,
+                procedure_name: "".to_string(),
+                result_size: 0,
+                parameters_size: 0,
+                results: Vec::new(),
+                parameters: Vec::new(),
+            }, bytes_read));
         }
 
         let name = {
