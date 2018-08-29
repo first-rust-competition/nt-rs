@@ -5,17 +5,12 @@ use nt::state::State;
 
 use std::sync::{Arc, Mutex};
 
-use nt_packet::{ClientMessage, ServerMessage};
+use nt_packet::ClientMessage;
 use super::Packet;
 
 use std::io;
 
 use super::try_decode;
-
-pub trait ServerMessageStateful: ServerMessage {
-    fn decode_stateful(buf: &mut Buf, state: Arc<Mutex<State>>) -> (Option<Self>, usize)
-        where Self: Sized;
-}
 
 /// Codec for the NetworkTables protocol
 /// Built on `ClientMessage` for outgoing packets, and `ServerMessage` for incoming packets.
