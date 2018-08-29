@@ -192,9 +192,9 @@ impl NetworkTables {
 }
 
 impl Drop for NetworkTables {
+    #[allow(unused_must_use)]
     fn drop(&mut self) {
         // Don't explicitly unwrap the error. Handle.disconnect performs the same action, which will drop the read half of this Channel
-        #[allow(unused_must_use)]
         self.end_tx.clone().send(()).wait();
     }
 }
