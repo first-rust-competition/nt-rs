@@ -6,7 +6,7 @@
 //! the state of the connection, accessing, as well as updating and creating entries that will be
 //! synced to the server.
 
-#![feature(attr_literals, nll)]
+#![feature(nll)]
 #![deny(missing_docs)]
 
 extern crate futures;
@@ -35,5 +35,5 @@ mod nt;
 /// Base result type for nt-rs
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
-pub use self::proto::types::{EntryData, EntryValue, EntryType};
+pub use self::proto::types::{EntryData, EntryValue, EntryType, rpc::*};
 pub use self::nt::*;

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use nt_packet::{ClientMessage, ServerMessage};
 use super::Packet;
 
-use std::io::{Error, ErrorKind};
+use std::io;
 
 use super::try_decode;
 
@@ -33,7 +33,7 @@ impl NTCodec {
 
 impl Encoder for NTCodec {
     type Item = Box<ClientMessage>;
-    type Error = Error;
+    type Error = ::failure::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error> {
         item.encode(dst);
@@ -43,7 +43,7 @@ impl Encoder for NTCodec {
 
 impl Decoder for NTCodec {
     type Item = Packet;
-    type Error = Error;
+    type Error = ::failure::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let mut buf = src.clone().freeze().into_buf();
@@ -52,14 +52,19 @@ impl Decoder for NTCodec {
             return Ok(None);
         }
 
-        let decode_res = try_decode(&mut buf, &self.state);
-
-        let (packet, bytes_read) = match decode_res {
-            Ok(tuple) => tuple,
-            Err(e) => return Err(Error::new(ErrorKind::Other, format!("{}", e))),
+        let (packet, bytes_read) = match try_decode(&mut buf, &self.state) {
+            Ok(t) => t,
+            Err(e) => match e.find_root_cause().downcast_ref::<io::Error>() {
+                Some(err) => if err.kind() == io::ErrorKind::UnexpectedEof {
+                    return Ok(None);
+                }else {
+                    return Err(e);
+                },
+                None => return Err(e)
+            }
         };
 
-        // This makes sure that a value was actually read successfully from the buffer, so that advancing the cursor is fine
+        // Advance the buffer, any errors in deserializing that would cause us to not want to advance it are handled in the match above
         src.advance(bytes_read);
 
         Ok(Some(packet))

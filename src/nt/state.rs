@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use proto::types::{EntryData, EntryValue};
+use proto::types::{EntryData, EntryValue, rpc::*};
 use proto::*;
+use proto::rpc::*;
 use nt_packet::ClientMessage;
 use nt::callback::*;
+use nt::entry::Entry;
 
 use futures::{Stream, Sink, Future};
 use futures::sync::mpsc::{channel, Sender, Receiver};
+use futures::sync::oneshot;
 use tokio::timer::Interval;
 use tokio_core::reactor::Remote;
 
@@ -56,7 +59,6 @@ impl ConnectionState {
 }
 
 /// Struct containing the internal state of a connection
-//#[derive(Clone)]
 pub struct State {
     /// Represents the current state of the connection
     connection_state: ConnectionState,
@@ -65,7 +67,7 @@ pub struct State {
     handle: Option<Box<Remote>>,
     pending_entries: Vec<(EntryData, Sender<u16>)>,
     callbacks: MultiMap<CallbackType, Box<Action>>,
-    #[allow(unused)] //TODO: Get rid of this when RPC is implemented
+    awaiting_rpcs: HashMap<u16, oneshot::Sender<RPCResponse>>,
     rpc_unique_id: u16,
 }
 
@@ -78,7 +80,8 @@ impl State {
             handle: None,
             pending_entries: Vec::new(),
             callbacks: MultiMap::new(),
-            rpc_unique_id: 0
+            awaiting_rpcs: HashMap::new(),
+            rpc_unique_id: 0,
         }
     }
 
@@ -87,10 +90,23 @@ impl State {
         self.handle = Some(Box::new(handle));
     }
 
-    #[allow(unused)] //TODO: Get rid of this when RPC is implemented
-    pub(crate) fn call_rpc(&mut self, def: EntryData) {
+    pub(crate) fn call_rpc<F>(&mut self, def: Entry, args: RPCExecutionBody, cb: F)
+        where F: FnOnce(RPCResponseBody) + Send + 'static
+    {
         if let ConnectionState::Connected(ref tx) = self.connection_state {
-
+            let id = self.rpc_unique_id;
+            let packet = RPCExecute::new(*def.id(), id, args);
+            self.rpc_unique_id += 1;
+            tx.clone().send(Box::new(packet)).wait().unwrap();
+            let (tx, rx) = oneshot::channel();
+            self.awaiting_rpcs.insert(id, tx);
+            self.handle.clone().unwrap().spawn(|_|
+                rx
+                    .and_then(|res| {
+                        cb(res.body);
+                        Ok(())
+                    })
+                    .then(|_| Ok(())))
         }
     }
 
@@ -124,8 +140,7 @@ impl State {
             }
 
             // Unwrap because at this point it's broken if we don't send
-            self.handle.clone().unwrap().spawn(|_|
-                tx.send(Box::new(packet)).then(|_| Ok(())));
+            tx.send(Box::new(packet)).wait().unwrap();
 
             rx
         } else {
@@ -158,10 +173,6 @@ impl State {
     /// Adds a NetworkTables entry with the given `key` and `entry`
     /// Called in response to packet 0x10 Entry Assignment
     pub(crate) fn add_entry(&mut self, info: EntryAssignment) {
-        if info.entry_value == EntryValue::Pass {
-            return;
-        }
-
         let data = EntryData::new_with_seqnum(info.entry_name, info.entry_flags, info.entry_value, info.entry_sequence_num);
 
         let mut remove_idx = None;
@@ -193,6 +204,12 @@ impl State {
         entry.flags = flags_update.entry_flags;
     }
 
+    pub(crate) fn handle_rpc_ret(&mut self, res: RPCResponse) {
+        if let Some(tx) = self.awaiting_rpcs.remove(&res.unique_id) {
+            tx.send(res).unwrap();
+        }
+    }
+
     /// Called internally to update the value of an entry
     pub(crate) fn handle_entry_updated(&mut self, update: EntryUpdate) {
         let old_entry = self.get_entry_mut(update.entry_id);
@@ -211,7 +228,6 @@ impl State {
                 .flat_map(|(_, cbs)| cbs)
                 .for_each(|cb| cb(&old_entry))
         }
-
     }
 
     /// Removes a NetworkTables entry of the given `key`
@@ -228,10 +244,9 @@ impl State {
     }
 
     /// Called internally to delete the entry with id `key` from this connection
-    /// `self` will be updated when the server re-broadcasts the deletion.
     pub(crate) fn delete_entry(&mut self, key: u16) {
         if let ConnectionState::Connected(tx) = self.connection_state.clone() {
-            self.entries.remove(&key);
+            self.remove_entry(key);
             let delete = EntryDelete::new(key);
             tx.send(Box::new(delete)).wait().unwrap();
         }

@@ -27,6 +27,11 @@ impl EntryData {
         Self::new_with_seqnum(name, flags, value, 1)
     }
 
+    /// Returns the type of the value of `self`
+    pub fn entry_type(&self) -> EntryType {
+        self.value.entry_type()
+    }
+
     #[doc(hidden)]
     pub(crate) fn new_with_seqnum(name: String, flags: u8, value: EntryValue, seqnum: u16) -> EntryData {
         EntryData {
@@ -78,8 +83,6 @@ pub enum EntryValue {
     StringArray(Vec<String>),
     /// An entry value containing definition data for a RPC
     RPCDef(RPCDefinitionData),
-    /// Dummy entry value marking malformed RPC definition data
-    Pass,
 }
 
 impl ClientMessage for EntryType {
@@ -234,7 +237,6 @@ impl EntryValue {
             EntryValue::DoubleArray(_) => EntryType::DoubleArray,
             EntryValue::StringArray(_) => EntryType::StringArray,
             EntryValue::RPCDef(_) => EntryType::RPCDef,
-            EntryValue::Pass => EntryType::RPCDef
         }
     }
 }
