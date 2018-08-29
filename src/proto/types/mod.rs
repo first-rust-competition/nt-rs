@@ -173,10 +173,10 @@ impl EntryType {
                 bytes_read += 1;
                 let mut arr = Vec::with_capacity(len);
 
-                for i in 0..len {
+                for _ in 0..len {
                     let (val, bytes) = String::decode(buf)?;
                     bytes_read += bytes;
-                    arr[i] = val;
+                    arr.push(val);
                 }
 
                 Ok((EntryValue::StringArray(arr), bytes_read))

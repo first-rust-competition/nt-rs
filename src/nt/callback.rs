@@ -12,4 +12,4 @@ pub enum CallbackType {
 }
 
 #[doc(hidden)]
-pub type Action = Fn(&EntryData) + Send + 'static;
+pub type Action = FnMut(&EntryData) + Send + 'static;

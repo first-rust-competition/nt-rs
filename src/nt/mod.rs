@@ -110,7 +110,7 @@ impl NetworkTables {
     /// Registers the given closure `cb` as a callback to be called for [`CallbackType`] `action`
     /// When `action` occurs due to either network or user events, all callbacks registered for that type will be called
     pub fn add_callback<F>(&mut self, action: CallbackType, cb: F)
-        where F: Fn(&EntryData) + Send + 'static
+        where F: FnMut(&EntryData) + Send + 'static
     {
         let mut state = self.state.lock().unwrap();
         state.callbacks_mut().insert(action, Box::new(cb));

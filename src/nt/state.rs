@@ -133,13 +133,11 @@ impl State {
 
             if let Some((id, _)) = self.entries.iter().find(|(_, it)| **it == chk_data) {
                 let id = id.clone();
-                self.handle.clone().unwrap()
-                    .spawn(move |_| notify_tx.send(id).map_err(drop)
-                        .then(|_| Ok(())));
+                notify_tx.send(id).wait().unwrap();
+
                 return rx;
             }
 
-            // Unwrap because at this point it's broken if we don't send
             tx.send(Box::new(packet)).wait().unwrap();
 
             rx
@@ -192,7 +190,7 @@ impl State {
             }
         }
 
-        self.callbacks.iter_all().filter(|&(key, _)| *key == CallbackType::Add)
+        self.callbacks.iter_all_mut().filter(|&(key, _)| *key == CallbackType::Add)
             .flat_map(|(_, cbs)| cbs)
             .for_each(|cb| cb(&data));
 
@@ -222,11 +220,11 @@ impl State {
             old_entry.value = update.entry_value;
             old_entry.seqnum += 1;
 
-            let old_entry = self.get_entry(update.entry_id);
+            let old_entry = self.get_entry(update.entry_id).clone();
 
-            self.callbacks.iter_all().filter(|&(key, _)| *key == CallbackType::Update)
+            self.callbacks.iter_all_mut().filter(|&(key, _)| *key == CallbackType::Update)
                 .flat_map(|(_, cbs)| cbs)
-                .for_each(|cb| cb(&old_entry))
+                .for_each(|cb| cb(&old_entry));
         }
     }
 
@@ -234,13 +232,13 @@ impl State {
     /// Called in response to packet 0x13 Entry Delete
     pub(crate) fn remove_entry(&mut self, key: u16) {
         debug!("State updated: Deleting {:#x}", key);
-        let entry_to_delete = &self.entries[&key];
 
-        self.callbacks.iter_all().filter(|&(key, _)| *key == CallbackType::Delete)
+        let entry = self.entries.remove(&key).unwrap();
+
+        self.callbacks.iter_all_mut().filter(|&(key, _)| *key == CallbackType::Delete)
             .flat_map(|(_, cbs)| cbs)
-            .for_each(|cb| cb(entry_to_delete));
+            .for_each(|cb| cb(&entry));
 
-        self.entries.remove(&key);
     }
 
     /// Called internally to delete the entry with id `key` from this connection
