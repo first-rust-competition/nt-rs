@@ -141,6 +141,26 @@ impl NetworkTables {
         id
     }
 
+    /// Attempts to find an entry with the name `name`
+    ///
+    /// Returns Some with the id if an entry exists with that name. Returns None if there isn't an entry with that name
+    pub fn find_id_by_name(&self, name: &str) -> Option<u16> {
+        self.entries().iter()
+            .filter(|&(_, data)| data.name == name.to_owned())
+            .map(|(id, _)| *id)
+            .nth(0)
+    }
+
+    /// Find all the entries of type `ty`
+    /// Returns a Vec of entry ids
+    pub fn find_entries_by_type(&self, ty: EntryType) -> Vec<u16> {
+        self.entries()
+            .iter()
+            .filter(|&(_, data)| data.entry_type() == ty)
+            .map(|(id, _)| *id)
+            .collect()
+    }
+
     /// Deletes the entry with id `id` from the server the client is currently connected to
     /// Must be used with care. Cannot be undone
     pub(crate) fn delete_entry(&mut self, id: u16) {
@@ -174,6 +194,7 @@ impl NetworkTables {
 impl Drop for NetworkTables {
     fn drop(&mut self) {
         // Don't explicitly unwrap the error. Handle.disconnect performs the same action, which will drop the read half of this Channel
+        #[allow(unused_must_use)]
         self.end_tx.clone().send(()).wait();
     }
 }

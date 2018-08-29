@@ -6,7 +6,7 @@
 //! the state of the connection, accessing, as well as updating and creating entries that will be
 //! synced to the server.
 
-#![feature(attr_literals, nll)]
+#![feature(nll)]
 #![deny(missing_docs)]
 
 extern crate futures;

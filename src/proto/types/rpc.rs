@@ -1,8 +1,5 @@
 #![allow(missing_docs)] //TODO: Get rid of this when I can
 use super::*;
-use nt::state::State;
-
-use std::sync::{Arc, Mutex};
 
 use bytes::{Bytes, Buf, IntoBuf};
 use leb128::LEB128Read;
@@ -29,7 +26,7 @@ impl ClientMessage for RPCExecutionBody {
 
 impl RPCResponseBody {
     //noinspection ALL (typechecking broken in intellij-rust for custom derives. Disable to get rid of annoying errors)
-    pub fn decode(mut buf: &mut Buf, rpc: RPCDefinitionData) -> Result<(Self, usize), ::failure::Error> {
+    pub fn decode(buf: &mut Buf, rpc: RPCDefinitionData) -> Result<(Self, usize), ::failure::Error> {
         match rpc.version {
             0x00 => RPCV0ResponseBody::decode(buf).map(|(body, bytes)| (RPCResponseBody::V0(body), bytes)),
             0x01 => RPCV1ResponseBody::decode(buf, rpc).map(|(body, bytes)| (RPCResponseBody::V1(body), bytes)),
@@ -52,14 +49,14 @@ impl RPCV1ResponseBody {
     fn decode(mut buf: &mut Buf, rpc: RPCDefinitionData) -> Result<(Self, usize), ::failure::Error> {
         let mut bytes_read = 0;
         {
-            let (l, bytes) = buf.read_unsigned()?;
+            let (_, bytes) = buf.read_unsigned()?;
             bytes_read += bytes;
         }
 
         let mut results = Vec::with_capacity(rpc.result_size);
 
         for i in 0..rpc.result_size {
-            let mut result = &rpc.results[i];
+            let result = &rpc.results[i];
             let (res, bytes) = result.result_type.get_entry(buf)?;
             bytes_read += bytes;
             results.push(res);
