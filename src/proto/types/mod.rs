@@ -11,6 +11,8 @@ pub mod rpc;
 /// Used interally to store entries
 #[derive(Clone, Debug, PartialEq)]
 pub struct EntryData {
+    /// The id associated with this entry
+    pub id: u16,
     /// The name associated with this entry
     pub name: String,
     /// The flags associated with this entry
@@ -23,8 +25,8 @@ pub struct EntryData {
 
 impl EntryData {
     /// Creates a new [`EntryData`] with the given parameters, and a sequence number of 1
-    pub fn new(name: String, flags: u8, value: EntryValue) -> EntryData {
-        Self::new_with_seqnum(name, flags, value, 1)
+    pub fn new(id: u16, name: String, flags: u8, value: EntryValue) -> EntryData {
+        Self::new_with_seqnum(id, name, flags, value, 1)
     }
 
     /// Returns the type of the value of `self`
@@ -33,8 +35,9 @@ impl EntryData {
     }
 
     #[doc(hidden)]
-    pub(crate) fn new_with_seqnum(name: String, flags: u8, value: EntryValue, seqnum: u16) -> EntryData {
+    pub(crate) fn new_with_seqnum(id: u16, name: String, flags: u8, value: EntryValue, seqnum: u16) -> EntryData {
         EntryData {
+            id,
             name,
             flags,
             value,
