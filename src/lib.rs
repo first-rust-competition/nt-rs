@@ -25,6 +25,9 @@ extern crate nt_leb128 as leb128;
 #[macro_use]
 extern crate derive_new;
 extern crate multimap;
+#[cfg(feature = "serde")]
+#[macro_use]
+extern crate serde;
 
 #[doc(hidden)]
 pub const NT_PROTOCOL_REV: u16 = 0x0300;

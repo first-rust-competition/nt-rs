@@ -10,6 +10,7 @@ pub mod rpc;
 /// Struct containing the data associated with an entry.
 /// Used interally to store entries
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct EntryData {
     /// The id associated with this entry
     pub id: u16,
@@ -48,6 +49,7 @@ impl EntryData {
 
 /// Corresponds to the type tag that NetworkTables presents prior to the corresponding [`EntryValue`]
 #[derive(Debug, PartialEq, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum EntryType {
     /// Represents a boolean entry value
     Boolean,
@@ -69,6 +71,8 @@ pub enum EntryType {
 
 /// Enum representing the different values that NetworkTables supports
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(feature = "serde", serde(untagged))]
 pub enum EntryValue {
     /// An entry value containing a single boolean
     Boolean(bool),

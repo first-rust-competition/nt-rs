@@ -77,6 +77,7 @@ pub struct RPCV0ExecuteBody {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RPCDefinitionData {
     pub version: u8,
     pub procedure_name: String,
@@ -87,6 +88,7 @@ pub struct RPCDefinitionData {
 }
 
 #[derive(Debug, Clone, PartialEq, ClientMessage)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Parameter {
     parameter_type: EntryType,
     parameter_name: String,
@@ -94,6 +96,7 @@ pub struct Parameter {
 }
 
 #[derive(Debug, Clone, PartialEq, ServerMessage, ClientMessage)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct RpcResult {
     result_type: EntryType,
     result_name: String,
