@@ -7,9 +7,9 @@ use tokio::prelude::*;
 use tokio_core::reactor::Core;
 
 use nt_packet::ClientMessage;
-use proto::*;
-use proto::types::*;
-use proto::types::rpc::{RPCResponseBody, RPCExecutionBody};
+use crate::proto::*;
+use crate::proto::types::*;
+use crate::proto::types::rpc::{RPCResponseBody, RPCExecutionBody};
 
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -55,7 +55,7 @@ impl NetworkTables {
     /// Assumes that target is a valid, running NetworkTables server.
     /// Returns a new [`NetworkTables`] once a connection has been established.
     /// If any errors are returned when trying to perform the connection, returns an [`Err`]
-    pub fn connect(client_name: &'static str, target: SocketAddr) -> ::Result<NetworkTables> {
+    pub fn connect(client_name: &'static str, target: SocketAddr) -> crate::Result<NetworkTables> {
         let state = Arc::new(Mutex::new(State::new()));
         state.lock().unwrap().set_connection_state(ConnectionState::Connecting);
         let (tx, rx) = channel();

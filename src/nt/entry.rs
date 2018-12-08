@@ -1,5 +1,5 @@
-use proto::types::{EntryValue, EntryData};
-use nt::NetworkTables;
+use crate::proto::types::{EntryValue, EntryData};
+use crate::nt::NetworkTables;
 
 /// Struct representing an immutable entry in NetworkTables with the given `id`
 pub struct Entry<'a> {

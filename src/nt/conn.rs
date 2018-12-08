@@ -8,10 +8,10 @@ use tokio_codec::Decoder;
 use std::sync::{Arc, Mutex};
 use std::net::SocketAddr;
 
-use proto::codec::NTCodec;
-use proto::client::ClientHello;
-use nt::state::{State, ConnectionState};
-use nt::{send_packets, poll_socket};
+use crate::proto::codec::NTCodec;
+use crate::proto::client::ClientHello;
+use crate::nt::state::{State, ConnectionState};
+use crate::nt::{send_packets, poll_socket};
 
 pub struct Connection {
     future: Box<Future<Item=(), Error=()> + Send>,
@@ -36,7 +36,7 @@ impl Connection {
             .map_err(|e| ::failure::Error::from(e))
             .and_then(move |sock| {
                 let codec = NTCodec::new(codec_state.clone()).framed(sock);
-                codec.send(Box::new(ClientHello::new(::NT_PROTOCOL_REV, client_name)))
+                codec.send(Box::new(ClientHello::new(crate::NT_PROTOCOL_REV, client_name)))
             })
             .map_err(move |e| {
                 error!("{}", e);

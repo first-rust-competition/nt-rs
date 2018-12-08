@@ -6,7 +6,7 @@ pub mod rpc;
 
 use self::types::*;
 use self::rpc::RPCResponse;
-use nt::state::State;
+use crate::nt::state::State;
 
 use std::sync::{Arc, Mutex};
 

@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
-use proto::types::{EntryData, EntryValue, rpc::*};
-use proto::*;
-use proto::rpc::*;
+use crate::proto::types::{EntryData, EntryValue, rpc::*};
+use crate::proto::*;
+use crate::proto::rpc::*;
 use nt_packet::ClientMessage;
-use nt::callback::*;
-use nt::entry::Entry;
+use crate::nt::callback::*;
+use crate::nt::entry::Entry;
 
 use futures::{Stream, Sink, Future};
 use futures::sync::mpsc::{channel, Sender, Receiver};

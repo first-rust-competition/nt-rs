@@ -1,9 +1,9 @@
-use proto::types::rpc::*;
-use proto::types::EntryValue;
+use crate::proto::types::rpc::*;
+use crate::proto::types::EntryValue;
 
 use bytes::Buf;
 use nt_packet::BufExt;
-use nt::state::State;
+use crate::nt::state::State;
 
 use std::sync::{Arc, Mutex};
 

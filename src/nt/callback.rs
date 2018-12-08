@@ -1,4 +1,4 @@
-use ::EntryData;
+use crate::EntryData;
 
 /// Enum representing the types of actions that can notify callbacks when they occur
 #[derive(PartialEq, Eq, Hash, Clone)]

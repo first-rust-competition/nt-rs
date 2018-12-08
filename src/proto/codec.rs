@@ -1,7 +1,7 @@
 use tokio_codec::{Encoder, Decoder};
 use bytes::{BytesMut, IntoBuf, Buf};
 
-use nt::state::State;
+use crate::nt::state::State;
 
 use std::sync::{Arc, Mutex};
 

@@ -3,10 +3,10 @@ use std::io::{Error, ErrorKind};
 
 use futures::sync::mpsc::Sender;
 
-use nt::state::*;
+use crate::nt::state::*;
 use nt_packet::ClientMessage;
-use proto::Packet;
-use proto::client::*;
+use crate::proto::Packet;
+use crate::proto::client::*;
 
 pub fn handle_packet(packet: Packet, state: &Arc<Mutex<State>>, tx: Sender<Box<ClientMessage>>) -> Result<Option<Box<ClientMessage>>, Error> {
     match packet {
