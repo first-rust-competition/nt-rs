@@ -171,7 +171,7 @@ impl State {
     /// Adds a NetworkTables entry with the given `key` and `entry`
     /// Called in response to packet 0x10 Entry Assignment
     pub(crate) fn add_entry(&mut self, info: EntryAssignment) {
-        let data = EntryData::new_with_seqnum(info.entry_id, info.entry_name, info.entry_flags, info.entry_value, info.entry_sequence_num);
+        let data = EntryData::new_with_seqnum(info.entry_name, info.entry_flags, info.entry_value, info.entry_sequence_num);
 
         let mut remove_idx = None;
         if let Some((i, (_, tx))) = self.pending_entries.iter().enumerate().find(|(_, (it, _))| *it == data.clone()) {
