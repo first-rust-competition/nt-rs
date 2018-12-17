@@ -1,6 +1,6 @@
 [package]
 name = "nt"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Redrield <redrield@gmail.com>"]
 
 description = "A NetworkTables revision 3 client library for Rust"

@@ -1,5 +1,3 @@
-#![feature(nll)]
-
 extern crate nt;
 extern crate failure;
 extern crate fern;
