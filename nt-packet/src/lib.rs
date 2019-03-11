@@ -21,6 +21,8 @@ use bytes::{Buf, BytesMut, BufMut};
 use leb128::write::LEB128Write;
 use leb128::read::LEB128Read;
 
+use std::io::{Error, ErrorKind};
+
 /// Trait representing an NT message/packet headed Client --> Server
 pub trait ClientMessage: Send {
     /// Encodes `Self` into the given `buf`
@@ -46,6 +48,10 @@ impl ServerMessage for String {
     fn decode(mut buf: &mut Buf) -> Result<(Self, usize), failure::Error> {
         let (len, bytes_read) = buf.read_unsigned()?;
         let len = len as usize;
+        // bytes is silly and panics instead of returning an Err
+        if buf.remaining() < len {
+            return Err(Error::new(ErrorKind::UnexpectedEof, "string len > remaining").into());
+        }
         let mut strbuf = vec![0; len];
         buf.copy_to_slice(&mut strbuf[..]);
         Ok((String::from_utf8(strbuf)?, len + bytes_read))
@@ -87,10 +93,10 @@ impl<T> ServerMessage for Vec<T>
         };
 
         let mut vec = Vec::with_capacity(len as usize);
-        for i in 0..len {
+        for _ in 0..len {
             let (t, bytes) = T::decode(buf)?;
             bytes_read += bytes;
-            vec[i as usize] = t;
+            vec.push(t)
         }
 
         Ok((vec, bytes_read))

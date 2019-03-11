@@ -1,6 +1,6 @@
 [package]
 name = "nt-packet"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Rhys Kenwell <redrield@gmail.com>"]
 
 description = "Crate containing traits core to nt-rs"
