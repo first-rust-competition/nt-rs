@@ -28,7 +28,7 @@ fn main() {
 
 ## Example usage: JavaScript
 ```javascript
-import("nt-ws").then(ntws => {
+import("nt-client").then(ntws => {
     ntws.NetworkTables.connect("ws://127.0.0.1:1735", "nt-js").then(nt => {
         nt.create_entry(new ntws.EntryData("/foo", 0, ntws.EntryType.String, "bar")).then(id => {
             console.log("Created entry with id " + id);

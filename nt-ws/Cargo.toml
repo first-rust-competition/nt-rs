@@ -1,6 +1,6 @@
 [package]
 name = "nt-ws"
-version = "0.1.0"
+version = "0.1.1"
 description = "A client-side web NetworkTables rev. 3 client"
 repository = "https://gitlab.com/Redrield/nt-rs"
 license = "MIT"
