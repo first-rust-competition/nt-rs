@@ -4,15 +4,13 @@ mod server;
 #[cfg(feature = "websocket")]
 mod ws;
 
-pub(crate) use self::client::{ClientCore, ClientState};
-pub(crate) use self::server::{ServerCore, ServerState};
+pub(crate) use self::client::ClientState;
+pub(crate) use self::server::ServerState;
 
 use nt_network::types::EntryValue;
 use crate::nt::{EntryData, callback::CallbackType};
 use crossbeam_channel::Receiver;
 use std::collections::HashMap;
-use nt_network::{ReceivedPacket, Packet};
-use tokio::prelude::*;
 
 pub trait NTBackend {
     type State: State;

@@ -4,7 +4,7 @@ use tokio::codec::{Decoder, Framed};
 use nt_network::codec::NTCodec;
 use futures::sync::mpsc::{self, UnboundedReceiver, Receiver, channel, UnboundedSender, unbounded};
 use failure::err_msg;
-use crossbeam_channel::{Receiver as CrossbeamReceiver, RecvTimeoutError};
+use crossbeam_channel::Receiver as CrossbeamReceiver;
 use crate::nt::EntryData;
 use crate::nt::callback::*;
 

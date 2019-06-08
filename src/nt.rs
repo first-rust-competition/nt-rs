@@ -12,7 +12,6 @@ use crate::proto::{State, NTBackend, Client, Server, ClientState, ServerState};
 use futures::sync::mpsc::{Sender, channel};
 use futures::Future;
 use futures::sink::Sink;
-use tokio::net::TcpStream;
 use std::net::SocketAddr;
 
 /// Core struct representing a connection to a NetworkTables server

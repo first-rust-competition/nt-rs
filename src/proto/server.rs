@@ -1,5 +1,5 @@
 use tokio::prelude::*;
-use nt_network::{ReceivedPacket, Result, Packet, EntryAssignment};
+use nt_network::{Result, Packet, EntryAssignment};
 use tokio::codec::Decoder;
 use tokio::net::TcpListener;
 use nt_network::codec::NTCodec;
