@@ -12,7 +12,7 @@ type Result<T> = std::result::Result<T, failure::Error>;
 fn main() -> Result<()> {
     setup_logger()?;
 
-    let mut client = NetworkTables::connect("nt-rs", "127.0.0.1:1735".parse()?)?;
+    let mut client = NetworkTables::connect("127.0.0.1:1735", "nt-rs")?;
     client.add_callback(CallbackType::Add, |new_entry| {
         println!("A new entry was received! {:?}", new_entry);
     });
@@ -24,10 +24,6 @@ fn main() -> Result<()> {
     client.add_callback(CallbackType::Update, |updated_entry| {
         println!("An entry was updated. New value: {:?}", updated_entry)
     });
-
-    while client.connected() {
-        // Loop forever
-    }
 
     Ok(())
 }
