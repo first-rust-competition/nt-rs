@@ -13,7 +13,7 @@ edition = "2018"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-nt-network = { path = "../nt-network", features = ["wasm-bindgen"] }
+nt-network = { version = "1.0.0", features = ["wasm-bindgen"] }
 stdweb = { version = "0.4.17", features = ["futures-support", "experimental_features_which_may_break_on_minor_version_bumps"] }
 bytes = "0.4.12"
 failure = "0.1.5"
