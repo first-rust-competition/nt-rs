@@ -1,15 +1,19 @@
 use crate::EntryData;
+use std::net::SocketAddr;
 
-/// Enum representing the types of actions that can notify callbacks when they occur
-#[derive(PartialEq, Eq, Hash, Clone)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum CallbackType {
-    /// Notifies callbacks when a new value is added
     Add,
-    /// Notifies callbacks when an existing value was validly updated
+    Delete,
     Update,
-    /// Notifies callbacks when a value was deleted
-    Delete
 }
 
-#[doc(hidden)]
-pub type Action = FnMut(&EntryData) + Send + 'static;
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
+pub enum ServerCallbackType {
+    ClientConnected,
+    ClientDisconnected,
+}
+
+pub type ServerAction = dyn FnMut(&SocketAddr) + Send + 'static;
+
+pub type Action = dyn FnMut(&EntryData) + Send + 'static;
