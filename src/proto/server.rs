@@ -80,6 +80,40 @@ impl ServerState {
         _self
     }
 
+    #[cfg(feature = "websocket")]
+    pub fn new_both(tcp_ip: String, ws_ip: String, server_name: String, close_rx: mpsc::Receiver<()>) -> Arc<Mutex<ServerState>> {
+        let _self = Arc::new(Mutex::new(ServerState { clients: HashMap::new(), server_name, entries: HashMap::new(), next_id: 0, callbacks: MultiMap::new(), server_callbacks: MultiMap::new() }));
+        let (ws_tx, ws_rx) = mpsc::channel::<()>(1);
+        let (tcp_tx, tcp_rx) = mpsc::channel::<()>(1);
+
+        let state = _self.clone();
+
+        thread::spawn(move || {
+            let close_rx = close_rx;
+            use websocket::r#async::Server;
+            use tokio::reactor::Handle;
+
+            let handle = Handle::default();
+
+            let ws_server = Server::bind(ws_ip, &handle).unwrap();
+            let ws_core = ServerCore::new_ws(state.clone(), ws_server, ws_rx).unwrap();
+
+            let tcp_server = TcpListener::bind(&tcp_ip.parse().unwrap()).unwrap();
+            let tcp_core = ServerCore::new(state.clone(), tcp_server, tcp_rx).unwrap();
+
+            tokio::run(futures::lazy(|| Ok(()))
+                .and_then(move |_| ws_core.spawn_ws())
+                .and_then(move |_| tcp_core.spawn())
+                .map_err(drop)
+                .and_then(move |_| close_rx.into_future().map_err(drop))
+                .and_then(move |_| ws_tx.send(()).map_err(drop))
+                .and_then(move |_| tcp_tx.send(()).map_err(drop))
+                .then(|_| Ok(())));
+        });
+
+        _self
+    }
+
     pub fn add_client(&mut self, socket: SocketAddr, ch: UnboundedSender<Box<dyn Packet>>) {
         self.clients.insert(socket, ch);
     }
@@ -159,10 +193,20 @@ impl ServerCore<TcpListener> {
         Ok(ServerCore { sock, state, close_rx })
     }
 
+    pub fn spawn(self) -> Result<()> {
+        tokio::spawn(self.gen_future());
+        Ok(())
+    }
+
     pub fn run(self) -> Result<()> {
+        tokio::run(self.gen_future());
+        Ok(())
+    }
+
+    fn gen_future(self) -> impl Future<Item=(), Error=()> {
         let state = self.state.clone();
         let close_rx = self.close_rx;
-        tokio::run(self.sock.incoming().map(|conn| (conn.peer_addr().unwrap(), NTCodec.framed(conn)))
+        self.sock.incoming().map(|conn| (conn.peer_addr().unwrap(), NTCodec.framed(conn)))
             .map(Either::A)
             .map_err(|e| failure::Error::from(e))
             .select(close_rx.map(Either::B).map_err(|_| err_msg("unreachable")))
@@ -175,8 +219,7 @@ impl ServerCore<TcpListener> {
                     }
                     Either::B(_) => Err(err_msg("NetworkTables dropped"))
                 }
-            }).map_err(|e| println!("Error from peer socket: {}", e)));
-        Ok(())
+            }).map_err(|e| println!("Error from peer socket: {}", e))
     }
 }
 
@@ -188,10 +231,19 @@ impl ServerCore<Server<NoTlsAcceptor>> {
     }
 
     pub fn run_ws(self) -> Result<()> {
+        tokio::run(self.gen_future_ws());
+        Ok(())
+    }
+
+    pub fn spawn_ws(self) -> Result<()> {
+        tokio::spawn(self.gen_future_ws());
+        Ok(())
+    }
+
+    fn gen_future_ws(self) -> impl Future<Item=(), Error=()> {
         let state = self.state.clone();
         let close_rx = self.close_rx;
-
-        tokio::run(self.sock.incoming()
+        self.sock.incoming()
             .map_err(|e| err_msg(format!("{:?}", e.error)))
             .map(Either::A)
             .select(close_rx.map(Either::B).map_err(|_| err_msg("unreachable")))
@@ -215,8 +267,6 @@ impl ServerCore<Server<NoTlsAcceptor>> {
                     }
                     Either::B(_) => Err(err_msg("NetworkTables dropped"))
                 }
-            }).map_err(drop).map(drop));
-
-        Ok(())
+            }).map_err(drop).map(drop)
     }
 }

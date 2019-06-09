@@ -60,6 +60,13 @@ impl NetworkTables<Server> {
         NetworkTables { state, close_tx }
     }
 
+    #[cfg(feature = "websocket")]
+    pub fn bind_both(tcp_ip: &str, ws_ip: &str, server_name: &str) -> NetworkTables<Server> {
+        let (close_tx, close_rx) = channel::<()>(1);
+        let state = ServerState::new_both(tcp_ip.to_string(), ws_ip.to_string(), server_name.to_string(), close_rx);
+        NetworkTables { state, close_tx }
+    }
+
     /// Adds a callback for connection state updates regarding clients.
     ///
     /// Depending on the chosen callback type, the callback will be called when a new client connects,
