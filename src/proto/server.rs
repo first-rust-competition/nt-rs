@@ -230,11 +230,15 @@ impl ServerCore<Server<NoTlsAcceptor>> {
         Ok(ServerCore { sock, state, close_rx })
     }
 
+    /// Starts listening by starting a new runtime to run this server's future
     pub fn run_ws(self) -> Result<()> {
         tokio::run(self.gen_future_ws());
         Ok(())
     }
 
+    /// Starts listening by spawning a new task onto an existing runtime for this server's future
+    ///
+    /// This function will panic if called before a runtime is created (e.g. using tokio::run)
     pub fn spawn_ws(self) -> Result<()> {
         tokio::spawn(self.gen_future_ws());
         Ok(())
