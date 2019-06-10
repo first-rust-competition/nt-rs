@@ -37,7 +37,6 @@ impl Stream for WSCodec {
             }
             Some(_) => Ok(Async::NotReady),
             None => Ok(Async::Ready(None)),
-            _ => Ok(Async::NotReady)
         }
     }
 }

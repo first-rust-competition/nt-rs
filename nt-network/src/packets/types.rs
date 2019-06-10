@@ -1,15 +1,15 @@
 use crate::packets::Packet;
 use crate::Result;
 use nt_leb128::*;
-use bytes::{BufMut, Buf};
+use bytes::{BufMut, Buf, BytesMut};
 use failure::bail;
 #[cfg(feature = "wasm-bindgen")]
 use wasm_bindgen::prelude::*;
 
 impl Packet for String {
-    fn serialize(&self, mut buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.write_unsigned(self.len() as u64).unwrap();
-        buf.put_slice(self.as_bytes());
+        buf.extend_from_slice(self.as_bytes());
         Ok(())
     }
 
@@ -26,7 +26,7 @@ impl Packet for String {
 }
 
 impl Packet for u8 {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(*self);
         Ok(())
     }
@@ -37,7 +37,7 @@ impl Packet for u8 {
 }
 
 impl Packet for bool {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(if *self { 1 } else { 0 });
         Ok(())
     }
@@ -49,7 +49,7 @@ impl Packet for bool {
 }
 
 impl Packet for f64 {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_f64_be(*self);
         Ok(())
     }
@@ -60,7 +60,7 @@ impl Packet for f64 {
 }
 
 impl<T: Packet> Packet for Vec<T> {
-    fn serialize(&self, mut buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.write_unsigned(self.len() as u64).unwrap();
         self.iter().for_each(|value| {
             value.serialize(buf).unwrap();
@@ -120,7 +120,7 @@ impl EntryValue {
 }
 
 impl Packet for EntryType {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         match *self {
             EntryType::Boolean => buf.put_u8(0x00),
             EntryType::Double => buf.put_u8(0x01),
@@ -151,7 +151,7 @@ impl Packet for EntryType {
 }
 
 impl EntryType {
-    pub fn write_value(&self, value: &EntryValue, buf: &mut dyn BufMut) -> Result<()> {
+    pub fn write_value(&self, value: &EntryValue, buf: &mut BytesMut) -> Result<()> {
         match value {
             EntryValue::Boolean(ref b) => b.serialize(buf)?,
             EntryValue::Double(ref d) => d.serialize(buf)?,

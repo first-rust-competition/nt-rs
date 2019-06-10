@@ -1,6 +1,6 @@
 [package]
 name = "nt-network"
-version = "1.0.0"
+version = "1.0.1"
 authors = ["Redrield <redrield@gmail.com>"]
 description = "Networking types and codecs for nt-rs"
 repository = "https://gitlab.com/Redrield/nt-rs"

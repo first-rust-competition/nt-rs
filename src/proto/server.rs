@@ -21,9 +21,9 @@ use nt_network::types::EntryValue;
 use std::thread;
 use multimap::MultiMap;
 #[cfg(feature = "websocket")]
-use websocket::server::NoTlsAcceptor;
+use websocket::r#async::Server;
 #[cfg(feature = "websocket")]
-use websocket::r#async::server::Server;
+use websocket::server::NoTlsAcceptor;
 #[cfg(feature = "websocket")]
 use super::ws::WSCodec;
 
@@ -68,7 +68,6 @@ impl ServerState {
         let _self = Arc::new(Mutex::new(ServerState { clients: HashMap::new(), server_name, entries: HashMap::new(), next_id: 0, callbacks: MultiMap::new(), server_callbacks: MultiMap::new() }));
         let state = _self.clone();
         thread::spawn(move || {
-            use websocket::r#async::Server;
             use tokio::reactor::Handle;
 
             let handle = Handle::default();
@@ -90,7 +89,6 @@ impl ServerState {
 
         thread::spawn(move || {
             let close_rx = close_rx;
-            use websocket::r#async::Server;
             use tokio::reactor::Handle;
 
             let handle = Handle::default();

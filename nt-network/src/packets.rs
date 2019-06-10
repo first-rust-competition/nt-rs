@@ -1,12 +1,12 @@
 use crate::{NTVersion, Result};
-use bytes::{Buf, BufMut};
+use bytes::{Buf, BufMut, BytesMut};
 use crate::ext::*;
 use crate::packets::types::{EntryType, EntryValue};
 
 pub mod types;
 
 pub trait Packet: Send + Sync {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()>;
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()>;
     fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)>
         where Self: Sized;
 }
@@ -31,7 +31,7 @@ impl ClientHello {
 }
 
 impl Packet for ClientHello {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x01);
         buf.put_u16_be(self.version as u16);
         self.name.serialize(buf)?; // cant use the method on buf because dum
@@ -66,7 +66,7 @@ impl ServerHello {
 }
 
 impl Packet for ServerHello {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x04);
         buf.put_u8(self.flags);
         self.name.serialize(buf)?;
@@ -105,7 +105,7 @@ impl EntryAssignment {
 }
 
 impl Packet for EntryAssignment {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x10);
         self.entry_name.serialize(buf)?;
         self.entry_type.serialize(buf)?;
@@ -133,7 +133,7 @@ impl Packet for EntryAssignment {
 pub struct ClientHelloComplete;
 
 impl Packet for ClientHelloComplete {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x05);
         Ok(())
     }
@@ -147,7 +147,7 @@ impl Packet for ClientHelloComplete {
 pub struct ServerHelloComplete;
 
 impl Packet for ServerHelloComplete {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x03);
         Ok(())
     }
@@ -160,7 +160,7 @@ impl Packet for ServerHelloComplete {
 pub struct KeepAlive;
 
 impl Packet for KeepAlive {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x00);
         Ok(())
     }
@@ -176,7 +176,7 @@ pub struct ProtocolVersionUnsupported {
 }
 
 impl Packet for ProtocolVersionUnsupported {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x02);
         buf.put_u16_be(self.supported_version);
         Ok(())
@@ -208,7 +208,7 @@ impl EntryUpdate {
 }
 
 impl Packet for EntryUpdate {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x11);
         buf.put_u16_be(self.entry_id);
         buf.put_u16_be(self.entry_seqnum);
@@ -243,7 +243,7 @@ impl EntryFlagsUpdate {
 }
 
 impl Packet for EntryFlagsUpdate {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x12);
         buf.put_u16_be(self.entry_id);
         buf.put_u8(self.entry_flags);
@@ -271,7 +271,7 @@ impl EntryDelete {
 }
 
 impl Packet for EntryDelete {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x13);
         buf.put_u16_be(self.entry_id);
         Ok(())
@@ -301,7 +301,7 @@ impl ClearAllEntries {
 }
 
 impl Packet for ClearAllEntries {
-    fn serialize(&self, buf: &mut dyn BufMut) -> Result<()> {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x14);
         buf.put_u32_be(self.magic);
         Ok(())

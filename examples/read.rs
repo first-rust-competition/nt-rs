@@ -5,8 +5,8 @@ type Result<T> = std::result::Result<T, failure::Error>;
 
 use nt::NetworkTables;
 
-use std::{thread};
-use std::time::Duration;
+
+
 
 fn main() -> Result<()> {
 
