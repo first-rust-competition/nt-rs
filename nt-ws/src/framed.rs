@@ -35,7 +35,7 @@ impl WsFramed {
                                 let mut state = state.lock().unwrap();
                                 let v: Vec<u8> = Vec::from(buf);
                                 state.rd.extend_from_slice(&v[..]);
-                                if let Ok(Some(packet)) = NTCodec.decode(&mut state.rd) {
+                                while let Ok(Some(packet)) = NTCodec.decode(&mut state.rd) {
                                     let f = &mut state.f;
                                     f(&packet);
                                     if let ReceivedPacket::ServerHelloComplete = packet {
