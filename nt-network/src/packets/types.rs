@@ -55,7 +55,7 @@ impl Packet for f64 {
     }
 
     fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
-        Ok((buf.get_f64_be(), 4))
+        Ok((buf.get_f64_be(), 8))
     }
 }
 
@@ -173,7 +173,7 @@ impl EntryType {
                 EntryValue::Boolean(buf.get_u8() == 1)
             }
             EntryType::Double => {
-                read += 4;
+                read += 8;
                 EntryValue::Double(buf.get_f64_be())
             }
             EntryType::String => {
