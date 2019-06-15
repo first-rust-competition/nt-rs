@@ -1,6 +1,6 @@
 [package]
 name = "nt"
-version = "1.0.1"
+version = "1.0.2"
 authors = ["Redrield <redrield@gmail.com>"]
 description = "A NetworkTables revision 3 library for Rust"
 license = "MIT"
@@ -11,7 +11,7 @@ edition = "2018"
 tokio = "0.1.19"
 bytes = "0.4.12"
 failure = "0.1.5"
-nt-network = "1.0.1"
+nt-network = "1.0.2"
 crossbeam-channel = "0.3.8"
 log = "0.4.6"
 fern = "0.5.8"
