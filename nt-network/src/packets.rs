@@ -39,14 +39,12 @@ impl Packet for ClientHello {
     }
 
     fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
-        let version = buf.read_u16_be()?;
+        let version = NTVersion::from_u16(buf.read_u16_be()?)?;
         let (name, name_bytes) = String::deserialize(buf)?;
-        unsafe {
             Ok((ClientHello {
-                version: std::mem::transmute::<u16, NTVersion>(version), //TODO: oh god change it
+                version,
                 name,
             }, 2 + name_bytes))
-        }
     }
 }
 

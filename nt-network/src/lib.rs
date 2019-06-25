@@ -2,6 +2,8 @@ mod packets;
 pub mod codec;
 mod ext;
 
+use failure::bail;
+
 pub type Result<T> = std::result::Result<T, failure::Error>;
 
 pub use self::codec::ReceivedPacket;
@@ -14,4 +16,13 @@ pub enum NTVersion {
     V3 = 0x0300,
 }
 
+impl NTVersion {
+    fn from_u16(v: u16) -> Result<NTVersion> {
+        match v {
+            0x0200 => Ok(NTVersion::V2),
+            0x0300 => Ok(NTVersion::V3),
+            _ => bail!("Invalid version passed in packet. {:#x}", v)
+        }
+    }
+}
 
