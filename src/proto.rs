@@ -1,11 +1,3 @@
-mod client;
-mod server;
-
-#[cfg(feature = "websocket")]
-mod ws;
-
-pub(crate) use self::client::ClientState;
-pub(crate) use self::server::ServerState;
 
 use nt_network::types::EntryValue;
 use crate::nt::{EntryData, callback::CallbackType};
@@ -14,11 +6,6 @@ use std::collections::HashMap;
 
 pub trait NTBackend {
     type State: State;
-}
-
-pub struct Server;
-impl NTBackend for Server {
-    type State = ServerState;
 }
 
 pub struct Client;
