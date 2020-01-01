@@ -1,4 +1,5 @@
-use bytes::{Buf, BytesMut};
+use bytes::{BytesMut, Buf};
+
 use std::io::{Error, Result, ErrorKind};
 use crate::packets::Packet;
 
@@ -28,7 +29,7 @@ pub trait BufExt: Buf {
     /// Reads an unsigned big endian short from `self`
     fn read_u16_be(&mut self) -> Result<u16> {
         if self.remaining() >= 2 {
-            Ok(self.get_u16_be())
+            Ok(self.get_u16())
         } else {
             Err(Error::new(ErrorKind::UnexpectedEof, "self.remaining() < 2"))
         }
@@ -37,7 +38,7 @@ pub trait BufExt: Buf {
     /// Reads an unsigned big endian integer from `self`
     fn read_u32_be(&mut self) -> Result<u32> {
         if self.remaining() >= 4 {
-            Ok(self.get_u32_be())
+            Ok(self.get_u32())
         } else {
             Err(Error::new(ErrorKind::UnexpectedEof, "self.remaining() < 4"))
         }
@@ -46,7 +47,7 @@ pub trait BufExt: Buf {
     /// Reads an unsigned big endian long from `self`
     fn read_u64_be(&mut self) -> Result<u64> {
         if self.remaining() >= 8 {
-            Ok(self.get_u64_be())
+            Ok(self.get_u64())
         } else {
             Err(Error::new(ErrorKind::UnexpectedEof, "self.remaining() < 8"))
         }
@@ -64,7 +65,7 @@ pub trait BufExt: Buf {
     /// Reads a signed big endian short from `self`
     fn read_i16_be(&mut self) -> Result<i16> {
         if self.remaining() >= 2 {
-            Ok(self.get_i16_be())
+            Ok(self.get_i16())
         } else {
             Err(Error::new(ErrorKind::UnexpectedEof, "self.remaining() < 2"))
         }
@@ -73,7 +74,7 @@ pub trait BufExt: Buf {
     /// Reads a signed big endian integer from `self`
     fn read_i32_be(&mut self) -> Result<i32> {
         if self.remaining() >= 4 {
-            Ok(self.get_i32_be())
+            Ok(self.get_i32())
         } else {
             Err(Error::new(ErrorKind::UnexpectedEof, "self.remaining() < 4"))
         }
@@ -82,7 +83,7 @@ pub trait BufExt: Buf {
     /// Reads a signed big endian long from `self`
     fn read_i64_be(&mut self) -> Result<i64> {
         if self.remaining() >= 8 {
-            Ok(self.get_i64_be())
+            Ok(self.get_i64())
         } else {
             Err(Error::new(ErrorKind::UnexpectedEof, "self.remaining() < 8"))
         }
@@ -91,7 +92,7 @@ pub trait BufExt: Buf {
     /// Reads a double precision floating point number big endian from `self`
     fn read_f64_be(&mut self) -> Result<f64> {
         if self.remaining() >= 8 {
-            Ok(self.get_f64_be())
+            Ok(self.get_f64())
         } else {
             Err(Error::new(ErrorKind::UnexpectedEof, "self.remaining() < 8"))
         }

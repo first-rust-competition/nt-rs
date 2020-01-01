@@ -1,8 +1,10 @@
 
 use nt_network::types::EntryValue;
 use crate::nt::{EntryData, callback::CallbackType};
-use crossbeam_channel::Receiver;
 use std::collections::HashMap;
+use futures_channel::mpsc::Receiver;
+
+pub mod client;
 
 pub trait NTBackend {
     type State: State;
@@ -10,7 +12,7 @@ pub trait NTBackend {
 
 pub struct Client;
 impl NTBackend for Client {
-    type State = ClientState;
+    type State = client::ClientState;
 }
 
 pub trait State {

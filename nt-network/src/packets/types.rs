@@ -50,12 +50,12 @@ impl Packet for bool {
 
 impl Packet for f64 {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
-        buf.put_f64_be(*self);
+        buf.put_f64(*self);
         Ok(())
     }
 
     fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
-        Ok((buf.get_f64_be(), 8))
+        Ok((buf.get_f64(), 8))
     }
 }
 
@@ -174,7 +174,7 @@ impl EntryType {
             }
             EntryType::Double => {
                 read += 8;
-                EntryValue::Double(buf.get_f64_be())
+                EntryValue::Double(buf.get_f64())
             }
             EntryType::String => {
                 let (s, len) = String::deserialize(buf)?;

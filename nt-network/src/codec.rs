@@ -1,5 +1,5 @@
-use tokio_codec::{Encoder, Decoder};
-use bytes::{BytesMut, Buf, IntoBuf};
+use tokio_util::codec::{Encoder, Decoder};
+use bytes::{BytesMut, Buf};
 use crate::ext::*;
 use crate::{Result, ClientHello, ProtocolVersionUnsupported, ServerHello, EntryAssignment, EntryUpdate, EntryFlagsUpdate, EntryDelete, ClearAllEntries, Packet};
 use std::io;
@@ -37,7 +37,7 @@ impl Decoder for NTCodec {
     type Error = failure::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<ReceivedPacket>> {
-        let mut buf = src.clone().freeze().into_buf();
+        let mut buf = src.clone().freeze();
 
         if buf.remaining() < 1 {
             return Ok(None);

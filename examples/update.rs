@@ -7,13 +7,13 @@ use nt::{NetworkTables, EntryData, EntryValue};
 use std::thread;
 use std::time::Duration;
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
 //    setup_logger()?;
 
-    let client = NetworkTables::connect("127.0.0.1:1735", "nt-rs")?;
-    thread::sleep(Duration::from_millis(250));
+    let client = NetworkTables::connect("127.0.0.1:1735", "nt-rs").await?;
     println!("Creating entry");
-    let entry_id = client.create_entry(EntryData::new("update1".to_string(), 0, EntryValue::String("Hello!".to_string())));
+    let entry_id = client.create_entry(EntryData::new("update1".to_string(), 0, EntryValue::String("Hello!".to_string()))).await;
     println!("Entry created");
 
     {
@@ -27,23 +27,6 @@ fn main() -> Result<()> {
 
     thread::sleep(Duration::from_millis(250));
 
-    Ok(())
-}
-
-fn setup_logger() -> Result<()> {
-    fern::Dispatch::new()
-        .format(|out, msg, record| {
-            out.finish(format_args!(
-                "{} [{}] [{}] {}",
-                chrono::Local::now().format("[%Y-%m-%d] [%H:%M:%S]"),
-                record.target(),
-                record.level(),
-                msg
-            ))
-        })
-        .level(log::LevelFilter::Trace)
-        .chain(std::io::stdout())
-        .apply()?;
     Ok(())
 }
 
