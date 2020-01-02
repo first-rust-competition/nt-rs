@@ -10,9 +10,7 @@ use nt_network::types::EntryValue;
 use crate::nt::callback::*;
 use crate::proto::{State, NTBackend, Client, client::ClientState};
 use futures_channel::mpsc::{Sender, channel};
-use futures_util::sink::SinkExt;
 use futures_util::StreamExt;
-use std::net::SocketAddr;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables<T: NTBackend> {
@@ -36,9 +34,9 @@ impl NetworkTables<Client> {
     /// This call will block the thread until the client has completed the handshake with the server,
     /// at which point the connection will be valid to send and receive data over
     #[cfg(feature = "websocket")]
-    pub fn connect_ws(ip: &str, client_name: &str) -> Result<NetworkTables<Client>> {
+    pub async fn connect_ws(ip: &str, client_name: &str) -> Result<NetworkTables<Client>> {
         let (close_tx, close_rx) = channel::<()>(1);
-        let state = ClientState::new_ws(ip.to_string(), client_name.to_string(), close_rx)?;
+        let state = ClientState::new_ws(ip.to_string(), client_name.to_string(), close_rx).await;
 
         Ok(NetworkTables { state, close_tx })
     }

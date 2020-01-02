@@ -1,8 +1,6 @@
-use async_trait::async_trait;
 use super::State;
 use crate::{EntryData, CallbackType, EntryValue, Action};
 use std::collections::HashMap;
-use nt_network::codec::NTCodec;
 use multimap::MultiMap;
 use tokio::runtime::Runtime;
 use futures_channel::mpsc::{unbounded, UnboundedSender, Receiver, Sender, channel};
@@ -35,7 +33,31 @@ impl ClientState {
         let rt_state = state.clone();
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
-            rt.block_on(conn::connection(rt_state, packet_rx, ip, name, ready_tx, close_rx));
+            rt.block_on(conn::connection(rt_state, packet_rx, ip, name, ready_tx, close_rx)).unwrap();
+        });
+
+        ready_rx.next().await;
+        state
+    }
+
+    #[cfg(feature = "websocket")]
+    pub async fn new_ws(url: String, name: String, close_rx: Receiver<()>) -> Arc<Mutex<ClientState>> {
+        let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();
+        let (ready_tx, mut ready_rx) = unbounded::<()>();
+
+        let state = Arc::new(Mutex::new(ClientState {
+            entries: HashMap::new(),
+            callbacks: MultiMap::new(),
+            pending_entries: HashMap::new(),
+            packet_tx
+        }));
+
+        let rt_state = state.clone();
+        thread::spawn(move || {
+            let mut rt = Runtime::new().unwrap();
+            println!("websocket runtime thread started");
+
+            rt.block_on(conn::connection_ws(rt_state, packet_rx, url, name, ready_tx, close_rx)).unwrap();
         });
 
         ready_rx.next().await;
@@ -43,7 +65,6 @@ impl ClientState {
     }
 }
 
-#[async_trait]
 impl State for ClientState {
     fn entries(&self) -> &HashMap<u16, EntryData> {
         &self.entries
@@ -54,33 +75,33 @@ impl State for ClientState {
     }
 
     fn create_entry(&mut self, data: EntryData) -> Receiver<u16> {
-        let (tx, mut rx) = channel::<u16>(1);
+        let (tx, rx) = channel::<u16>(1);
         self.pending_entries.insert(data.name.clone(), tx);
-        self.packet_tx.unbounded_send(Box::new(EntryAssignment::new(data.name.clone(), data.entry_type(), 0xFFFF, data.seqnum, data.flags, data.value)));
+        self.packet_tx.unbounded_send(Box::new(EntryAssignment::new(data.name.clone(), data.entry_type(), 0xFFFF, data.seqnum, data.flags, data.value))).unwrap();
         rx
     }
 
     fn delete_entry(&mut self, id: u16) {
         let packet = EntryDelete::new(id);
-        self.packet_tx.unbounded_send(Box::new(packet));
+        self.packet_tx.unbounded_send(Box::new(packet)).unwrap();
     }
 
     fn update_entry(&mut self, id: u16, new_value: EntryValue) {
         if let Some(entry) = self.entries.get_mut(&id) {
             entry.value = new_value.clone();
-            self.packet_tx.unbounded_send(Box::new(EntryUpdate::new(id, entry.seqnum + 1, entry.entry_type(), new_value)));
+            self.packet_tx.unbounded_send(Box::new(EntryUpdate::new(id, entry.seqnum + 1, entry.entry_type(), new_value))).unwrap();
         }
     }
 
     fn update_entry_flags(&mut self, id: u16, flags: u8) {
         if let Some(entry) = self.entries.get_mut(&id) {
             entry.flags = flags;
-            self.packet_tx.unbounded_send(Box::new(EntryFlagsUpdate::new(id, flags)));
+            self.packet_tx.unbounded_send(Box::new(EntryFlagsUpdate::new(id, flags))).unwrap();
         }
     }
 
     fn clear_entries(&mut self) {
-        self.packet_tx.unbounded_send(Box::new(ClearAllEntries::new()));
+        self.packet_tx.unbounded_send(Box::new(ClearAllEntries::new())).unwrap();
         self.entries.clear();
     }
 

@@ -5,6 +5,9 @@ use std::collections::HashMap;
 use futures_channel::mpsc::Receiver;
 
 pub mod client;
+pub mod server;
+#[cfg(feature = "websocket")]
+pub mod ws;
 
 pub trait NTBackend {
     type State: State;
@@ -13,6 +16,11 @@ pub trait NTBackend {
 pub struct Client;
 impl NTBackend for Client {
     type State = client::ClientState;
+}
+
+pub struct Server;
+impl NTBackend for Server {
+    type State = server::ServerState;
 }
 
 pub trait State {
