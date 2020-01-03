@@ -114,13 +114,13 @@ impl Packet for EntryAssignment {
         Ok(())
     }
 
-    fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
         let (s, mut read) = String::deserialize(buf)?;
         let (ty, bytes) = EntryType::deserialize(buf)?;
         read += bytes;
-        let entry_id = buf.get_u16();
-        let entry_seqnum = buf.get_u16();
-        let flags = buf.get_u8();
+        let entry_id = buf.read_u16_be()?;
+        let entry_seqnum = buf.read_u16_be()?;
+        let flags = buf.read_u8()?;
         let (value, bytes) = ty.read_value(buf)?;
         read += bytes;
         Ok((EntryAssignment::new(s, ty, entry_id, entry_seqnum, flags, value), 5 + read))
@@ -171,6 +171,14 @@ impl Packet for KeepAlive {
 #[derive(Debug, Clone)]
 pub struct ProtocolVersionUnsupported {
     pub supported_version: u16,
+}
+
+impl ProtocolVersionUnsupported {
+    pub fn new(supported_version: NTVersion) -> ProtocolVersionUnsupported {
+        ProtocolVersionUnsupported {
+            supported_version: supported_version as _
+        }
+    }
 }
 
 impl Packet for ProtocolVersionUnsupported {

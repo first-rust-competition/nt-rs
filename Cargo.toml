@@ -17,10 +17,11 @@ nt-leb128 = "0.3.0"
 futures-channel = "0.3"
 futures-util = { version = "0.3", features = ["sink"] }
 tokio-util = { version = "0.2", features = ["codec"] }
-url = "2.1.0"
+url = { version = "2.1.0", optional = true }
 tokio-tungstenite = { git = "https://github.com/dbcfd/tokio-tungstenite", branch = "tokio2", optional = true }
+http = { version = "0.1.21", optional = true }
 
 [features]
 default = []
-websocket = ["tokio-tungstenite"]
+websocket = ["tokio-tungstenite", "url", "http"]
 

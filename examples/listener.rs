@@ -1,6 +1,7 @@
 use nt::*;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let mut nt = NetworkTables::bind("0.0.0.0:1735", "nt-rs-server");
 
     nt.add_connection_callback(ServerCallbackType::ClientConnected, |addr| {

@@ -8,9 +8,11 @@ use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use nt_network::types::EntryValue;
 use crate::nt::callback::*;
-use crate::proto::{State, NTBackend, Client, client::ClientState};
+use crate::proto::{State, NTBackend, Client, client::ClientState, Server};
 use futures_channel::mpsc::{Sender, channel};
 use futures_util::StreamExt;
+use std::net::SocketAddr;
+use crate::proto::server::ServerState;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables<T: NTBackend> {
@@ -42,37 +44,37 @@ impl NetworkTables<Client> {
     }
 }
 
-//impl NetworkTables<Server> {
-//    /// Initializes an NT server over TCP and binds it to the given ip, with the given server name.
-//    pub fn bind(ip: &str, server_name: &str) -> NetworkTables<Server> {
-//        let (close_tx, close_rx) = channel::<()>(1);
-//        let state = ServerState::new(ip.to_string(), server_name.to_string(), close_rx);
-//        NetworkTables { state, close_tx }
-//    }
-//
-//    /// Initializes an NT server over websockets and binds it to the given ip, with the given server name
-//    #[cfg(feature = "websocket")]
-//    pub fn bind_ws(ip: &str, server_name: &str) -> NetworkTables<Server> {
-//        let (close_tx, close_rx) = channel::<()>(1);
-//        let state = ServerState::new_ws(ip.to_string(), server_name.to_string(), close_rx);
-//        NetworkTables { state, close_tx }
-//    }
-//
-//    #[cfg(feature = "websocket")]
-//    pub fn bind_both(tcp_ip: &str, ws_ip: &str, server_name: &str) -> NetworkTables<Server> {
-//        let (close_tx, close_rx) = channel::<()>(1);
-//        let state = ServerState::new_both(tcp_ip.to_string(), ws_ip.to_string(), server_name.to_string(), close_rx);
-//        NetworkTables { state, close_tx }
-//    }
-//
-//    /// Adds a callback for connection state updates regarding clients.
-//    ///
-//    /// Depending on the chosen callback type, the callback will be called when a new client connects,
-//    /// or when an existing client disconnects from the server
-//    pub fn add_connection_callback(&mut self, callback_type: ServerCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
-//        self.state.lock().unwrap().add_server_callback(callback_type, action);
-//    }
-//}
+impl NetworkTables<Server> {
+    /// Initializes an NT server over TCP and binds it to the given ip, with the given server name.
+    pub fn bind(ip: &str, server_name: &str) -> NetworkTables<Server> {
+        let (close_tx, close_rx) = channel::<()>(1);
+        let state = ServerState::new(ip.to_string(), server_name.to_string(), close_rx);
+        NetworkTables { state, close_tx }
+    }
+
+    /// Initializes an NT server over websockets and binds it to the given ip, with the given server name
+    #[cfg(feature = "websocket")]
+    pub fn bind_ws(ip: &str, server_name: &str) -> NetworkTables<Server> {
+        let (close_tx, close_rx) = channel::<()>(1);
+        let state = ServerState::new_ws(ip.to_string(), server_name.to_string(), close_rx);
+        NetworkTables { state, close_tx }
+    }
+
+    #[cfg(feature = "websocket")]
+    pub fn bind_both(tcp_ip: &str, ws_ip: &str, server_name: &str) -> NetworkTables<Server> {
+        let (close_tx, close_rx) = channel::<()>(1);
+        let state = ServerState::new_both(tcp_ip.to_string(), ws_ip.to_string(), server_name.to_string(), close_rx);
+        NetworkTables { state, close_tx }
+    }
+
+    /// Adds a callback for connection state updates regarding clients.
+    ///
+    /// Depending on the chosen callback type, the callback will be called when a new client connects,
+    /// or when an existing client disconnects from the server
+    pub fn add_connection_callback(&mut self, callback_type: ServerCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
+        self.state.lock().unwrap().add_server_callback(callback_type, action);
+    }
+}
 
 impl<T: NTBackend> NetworkTables<T> {
     /// Returns a copy of the entries recognizes by the connection

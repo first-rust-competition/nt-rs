@@ -1,42 +1,186 @@
 use crate::proto::State;
-use crate::{EntryData, CallbackType, EntryValue};
+use crate::{EntryData, CallbackType, EntryValue, Action, ServerCallbackType, ServerAction};
 use std::collections::HashMap;
-use futures_channel::mpsc::Receiver;
+use futures_channel::mpsc::{Receiver, UnboundedSender, channel};
+use std::net::SocketAddr;
+use nt_network::{Packet, EntryAssignment, EntryDelete, EntryUpdate, EntryFlagsUpdate, ClearAllEntries};
+use multimap::MultiMap;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use tokio::runtime::Runtime;
+use futures_util::StreamExt;
+
+mod conn;
 
 pub struct ServerState {
+    server_name: String,
+    clients: HashMap<SocketAddr, UnboundedSender<Box<dyn Packet>>>,
+    entries: HashMap<u16, EntryData>,
+    callbacks: MultiMap<CallbackType, Box<Action>>,
+    server_callbacks: MultiMap<ServerCallbackType, Box<ServerAction>>,
+    next_id: u16,
+}
 
+impl ServerState {
+    pub fn new(ip: String, server_name: String, close_rx: Receiver<()>) -> Arc<Mutex<ServerState>> {
+        let state = Arc::new(Mutex::new(ServerState {
+            server_name,
+            clients: HashMap::new(),
+            entries: HashMap::new(),
+            callbacks: MultiMap::new(),
+            server_callbacks: MultiMap::new(),
+            next_id: 0
+        }));
+
+        let rt_state = state.clone();
+        thread::spawn(move || {
+            let mut rt = Runtime::new().unwrap();
+            rt.block_on(conn::connection(ip, rt_state, close_rx)).unwrap();
+        });
+
+        state
+    }
+
+    #[cfg(feature = "websocket")]
+    pub fn new_ws(ip: String, server_name: String, close_rx: Receiver<()>) -> Arc<Mutex<ServerState>> {
+        let state = Arc::new(Mutex::new(ServerState {
+            server_name,
+            clients: HashMap::new(),
+            entries: HashMap::new(),
+            callbacks: MultiMap::new(),
+            server_callbacks: MultiMap::new(),
+            next_id: 0
+        }));
+
+        let rt_state = state.clone();
+        thread::spawn(move || {
+            let mut rt = Runtime::new().unwrap();
+            rt.block_on(conn::connection_ws(ip, rt_state, close_rx)).unwrap();
+        });
+
+        state
+    }
+
+    #[cfg(feature = "websocket")]
+    pub fn new_both(tcp_ip: String, ws_ip: String, server_name: String, mut close_rx: Receiver<()>) -> Arc<Mutex<ServerState>> {
+        let state = Arc::new(Mutex::new(ServerState {
+            server_name,
+            clients: HashMap::new(),
+            entries: HashMap::new(),
+            callbacks: MultiMap::new(),
+            server_callbacks: MultiMap::new(),
+            next_id: 0
+        }));
+
+        let rt_state = state.clone();
+        thread::spawn(move || {
+            let mut rt = Runtime::new().unwrap();
+
+            let (mut tcp_tx, tcp_rx) = channel::<()>(1);
+            let (mut ws_tx, ws_rx) = channel::<()>(1);
+
+            rt.spawn(async move {
+                close_rx.next().await;
+                tcp_tx.try_send(()).unwrap();
+                ws_tx.try_send(()).unwrap();
+            });
+
+
+            rt.spawn(conn::connection(tcp_ip, rt_state.clone(), tcp_rx));
+            rt.block_on(conn::connection_ws(ws_ip, rt_state, ws_rx)).unwrap();
+        });
+
+        state
+    }
+
+    pub fn add_server_callback(&mut self, callback_type: ServerCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
+        self.server_callbacks.insert(callback_type, Box::new(action));
+    }
 }
 
 impl State for ServerState {
     fn entries(&self) -> &HashMap<u16, EntryData> {
-        unimplemented!()
+        &self.entries
     }
 
     fn entries_mut(&mut self) -> &mut HashMap<u16, EntryData> {
-        unimplemented!()
+        &mut self.entries
     }
 
     fn create_entry(&mut self, data: EntryData) -> Receiver<u16> {
-        unimplemented!()
+        let id = self.next_id;
+        self.next_id += 1;
+        self.entries.insert(id, data.clone());
+
+        let packet = Box::new(EntryAssignment::new(data.name.clone(), data.entry_type(), id, data.seqnum, data.flags, data.value.clone()));
+        for tx in self.clients.values() {
+            tx.unbounded_send(packet.clone()).unwrap()
+        }
+
+        self.callbacks.iter_all_mut()
+            .filter(|(cb, _)| **cb == CallbackType::Add)
+            .flat_map(|(_, cbs)| cbs)
+            .for_each(|cb| cb(&data));
+
+        let (mut tx, rx) = channel(1);
+        tx.try_send(id).unwrap();
+        rx
     }
 
     fn delete_entry(&mut self, id: u16) {
-        unimplemented!()
+        let entry = self.entries.remove(&id).unwrap();
+
+        let packet = Box::new(EntryDelete::new(id));
+        for tx in self.clients.values() {
+            tx.unbounded_send(packet.clone()).unwrap();
+        }
+
+        self.callbacks.iter_all_mut()
+            .filter(|(cb, _)| **cb == CallbackType::Delete)
+            .flat_map(|(_, cbs)| cbs)
+            .for_each(|cb| cb(&entry));
     }
 
     fn update_entry(&mut self, id: u16, new_value: EntryValue) {
-        unimplemented!()
+        if let Some(entry) = self.entries.get_mut(&id) {
+            entry.seqnum = entry.seqnum.wrapping_add(1);
+            entry.value = new_value;
+
+            let packet = Box::new(EntryUpdate::new(id, entry.seqnum, entry.entry_type(), entry.value.clone()));
+            for tx in self.clients.values() {
+                tx.unbounded_send(packet.clone()).unwrap();
+            }
+
+            let entry = &*entry;
+
+            self.callbacks.iter_all_mut()
+                .filter(|(cb, _)| **cb == CallbackType::Update)
+                .flat_map(|(_, cbs)| cbs)
+                .for_each(|cb| cb(entry));
+        }
     }
 
     fn update_entry_flags(&mut self, id: u16, flags: u8) {
-        unimplemented!()
+        if let Some(entry) = self.entries.get_mut(&id) {
+            entry.flags = flags;
+
+            let packet = Box::new(EntryFlagsUpdate::new(id, flags));
+            for tx in self.clients.values() {
+                tx.unbounded_send(packet.clone()).unwrap();
+            }
+        }
     }
 
     fn clear_entries(&mut self) {
-        unimplemented!()
+        self.entries.clear();
+
+        let packet = Box::new(ClearAllEntries::new());
+        for tx in self.clients.values() {
+            tx.unbounded_send(packet.clone()).unwrap();
+        }
     }
 
-    fn add_callback(&mut self, callback_type: CallbackType, action: impl FnMut(&EntryData) + Send) {
-        unimplemented!()
+    fn add_callback(&mut self, callback_type: CallbackType, action: impl FnMut(&EntryData) + Send + 'static) {
+        self.callbacks.insert(callback_type, Box::new(action));
     }
 }

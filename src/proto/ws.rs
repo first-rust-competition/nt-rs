@@ -7,11 +7,30 @@ use futures_util::task::{Context, Poll};
 use failure::_core::pin::Pin;
 use nt_network::{ReceivedPacket, Packet};
 use bytes::BytesMut;
-use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
+use tokio_tungstenite::{WebSocketStream, tungstenite::{Message, handshake::server::{Callback, Request, ErrorResponse}}};
+use http::StatusCode;
 
 pub struct WSCodec {
     sock: WebSocketStream<TcpStream>,
     rd: BytesMut
+}
+
+pub struct ServerHeaderCallback;
+
+impl Callback for ServerHeaderCallback {
+    fn on_request(self, request: &Request) -> Result<Option<Vec<(String, String)>>, ErrorResponse> {
+        let proto = request.headers.find_first("Sec-WebSocket-Protocol").unwrap_or("".as_bytes()); // Get protocol from headers
+        let proto = std::str::from_utf8(proto).unwrap();
+        if proto.eq_ignore_ascii_case("networktables") {
+            Ok(Some(vec![("Sec-WebSocket-Protocol".to_string(), proto.to_string())]))
+        }else {
+            Err(ErrorResponse {
+                error_code: StatusCode::from_u16(510).unwrap(),
+                headers: None,
+                body: Some("NetworkTables protocol not specified.".to_string())
+            })
+        }
+    }
 }
 
 impl WSCodec {
