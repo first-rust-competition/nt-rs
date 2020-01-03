@@ -15,23 +15,6 @@ pub struct WSCodec {
     rd: BytesMut
 }
 
-pub struct ServerHeaderCallback;
-
-impl Callback for ServerHeaderCallback {
-    fn on_request(self, request: &Request) -> Result<Option<Vec<(String, String)>>, ErrorResponse> {
-        let proto = request.headers.find_first("Sec-WebSocket-Protocol").unwrap_or("".as_bytes()); // Get protocol from headers
-        let proto = std::str::from_utf8(proto).unwrap();
-        if proto.eq_ignore_ascii_case("networktables") {
-            Ok(Some(vec![("Sec-WebSocket-Protocol".to_string(), proto.to_string())]))
-        }else {
-            Err(ErrorResponse {
-                error_code: StatusCode::from_u16(510).unwrap(),
-                headers: None,
-                body: Some("NetworkTables protocol not specified.".to_string())
-            })
-        }
-    }
-}
 
 impl WSCodec {
     pub fn new(sock: WebSocketStream<TcpStream>) -> WSCodec {

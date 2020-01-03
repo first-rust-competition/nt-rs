@@ -55,39 +55,7 @@ impl ServerState {
         let rt_state = state.clone();
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
-            rt.block_on(conn::connection_ws(ip, rt_state, close_rx)).unwrap();
-        });
-
-        state
-    }
-
-    #[cfg(feature = "websocket")]
-    pub fn new_both(tcp_ip: String, ws_ip: String, server_name: String, mut close_rx: Receiver<()>) -> Arc<Mutex<ServerState>> {
-        let state = Arc::new(Mutex::new(ServerState {
-            server_name,
-            clients: HashMap::new(),
-            entries: HashMap::new(),
-            callbacks: MultiMap::new(),
-            server_callbacks: MultiMap::new(),
-            next_id: 0
-        }));
-
-        let rt_state = state.clone();
-        thread::spawn(move || {
-            let mut rt = Runtime::new().unwrap();
-
-            let (mut tcp_tx, tcp_rx) = channel::<()>(1);
-            let (mut ws_tx, ws_rx) = channel::<()>(1);
-
-            rt.spawn(async move {
-                close_rx.next().await;
-                tcp_tx.try_send(()).unwrap();
-                ws_tx.try_send(()).unwrap();
-            });
-
-
-            rt.spawn(conn::connection(tcp_ip, rt_state.clone(), tcp_rx));
-            rt.block_on(conn::connection_ws(ws_ip, rt_state, ws_rx)).unwrap();
+            rt.block_on(conn::connection(ip, rt_state, close_rx)).unwrap();
         });
 
         state

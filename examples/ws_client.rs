@@ -2,7 +2,7 @@ use nt::*;
 
 #[tokio::main]
 async fn main() {
-    let mut nt = NetworkTables::connect_ws("ws://127.0.0.1:1835", "nt-ws").await.unwrap();
+    let mut nt = NetworkTables::connect_ws("ws://127.0.0.1:1735", "nt-ws").await.unwrap();
     nt.add_callback(CallbackType::Add, |data| {
         println!("Got new entry {:?}", data)
     });

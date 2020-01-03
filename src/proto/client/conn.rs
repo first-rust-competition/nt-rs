@@ -77,15 +77,15 @@ pub async fn connection_ws(state: Arc<Mutex<ClientState>>, mut packet_rx: Unboun
     while let Some(msg) = rx.next().await {
         match msg {
             Either::Left(packet) => {
-                println!("Got packet {:?}", packet);
-                if let Ok(packet) = packet {
-                    match packet {
+                match packet {
+                    Ok(packet) => match packet {
                         ReceivedPacket::ServerHelloComplete => {
                             ready_tx.unbounded_send(()).unwrap();
                             state.lock().unwrap().packet_tx.unbounded_send(Box::new(ClientHelloComplete)).unwrap();
                         }
                         packet @ _ => handle_packet(packet, &state)?
                     }
+                    Err(e) => return Err(e.into())
                 }
             },
             Either::Right(_) => return Ok(()),
