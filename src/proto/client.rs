@@ -55,7 +55,6 @@ impl ClientState {
         let rt_state = state.clone();
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
-            println!("websocket runtime thread started");
 
             let _ = rt.block_on(conn::connection_ws(rt_state, packet_rx, url, name, ready_tx, close_rx));
         });

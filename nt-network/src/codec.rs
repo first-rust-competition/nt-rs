@@ -112,6 +112,9 @@ fn try_decode(mut buf: &mut dyn Buf) -> Result<(ReceivedPacket, usize)> {
         _ => None
     };
 
-    Ok((packet.unwrap(), bytes))
+    match packet {
+        Some(packet) => Ok((packet, bytes)),
+        None => failure::bail!("Failed to decode packet"),
+    }
 }
 
