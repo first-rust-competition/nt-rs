@@ -8,7 +8,7 @@ use nt_network::{Packet, ReceivedPacket, NTVersion, ProtocolVersionUnsupported, 
 use futures_util::StreamExt;
 use futures_util::sink::{SinkExt, Sink};
 use nt_network::codec::NTCodec;
-use std::net::SocketAddr;
+use std::net::{SocketAddr, Shutdown};
 use crate::proto::State;
 use crate::{EntryData, ServerCallbackType, CallbackType};
 use futures_util::stream::Stream;
@@ -31,50 +31,8 @@ pub async fn connection(ip: String, state: Arc<Mutex<ServerState>>, close_rx: Re
         match std::str::from_utf8(&buf[..]) {
             // Spec says that the upgrade must be a GET, so check for that
             Ok(s) if s.starts_with("GET") => {
-                //TODO: clean this up a bit?
-                #[cfg(feature = "websocket")]
-                    {
-                        use tokio_tungstenite::tungstenite::{protocol::{Message, frame::{CloseFrame, coding::CloseCode}}, handshake::server::Request};
-                        use crate::proto::ws::WSCodec;
-                        println!("Connection is websocket");
-
-                        let mut client_valid = true;
-
-                        let mut conn = tokio_tungstenite::accept_hdr_async(conn, |req: &Request| {
-                            let proto = req.headers.find_first("Sec-WebSocket-Protocol").unwrap_or("".as_bytes()); // Get protocol from headers
-                            let proto = std::str::from_utf8(proto).unwrap();
-                            if proto.to_lowercase().contains("networktables") {
-                                Ok(Some(vec![("Sec-WebSocket-Protocol".to_string(), proto.to_string())]))
-                            } else {
-                                client_valid = false;
-                                Ok(None)
-                            }
-                        }).await?;
-
-                        if !client_valid {
-                            println!("Rejecting client for not specifying correct protocol");
-                            let frame = CloseFrame {
-                                code: CloseCode::Unsupported, // WS 1003
-                                reason: Cow::Borrowed("NetworkTables protocol required."),
-                            };
-                            let msg = Message::Close(Some(frame));
-                            conn.send(msg).await?;
-                            continue;
-                        }
-
-
-                        let codec = WSCodec::new(conn);
-
-                        let (tx, rx) = unbounded::<Box<dyn Packet>>();
-                        state.lock().unwrap().clients.insert(addr, tx);
-                        tokio::spawn(client_conn(addr, codec, rx, state.clone()));
-                    }
-
-                #[cfg(not(feature = "websocket"))]
-                    {
-                        println!("Websocket client detected, however this server is not configured for websockets. Ignoring.");
-                        continue;
-                    }
+                println!("Client is websocket");
+                handle_ws_conn(addr, conn, &state).await.unwrap();
             }
             // If the first bytes weren't "GET" it cannot be a websocket client
             _ => {
@@ -87,6 +45,59 @@ pub async fn connection(ip: String, state: Arc<Mutex<ServerState>>, close_rx: Re
         }
 
     }
+    Ok(())
+}
+
+#[cfg(not(feature = "websocket"))]
+async fn handle_ws_conn(_addr: SocketAddr, mut conn: TcpStream, _state: &Arc<Mutex<ServerState>>) -> crate::Result<()> {
+    // no http libs here, so lets make a fun response by hand
+    let resp  ="\
+    HTTP/1.1 405 Method Not Allowed\r\n\
+    Connection: close\r\n\
+    Content-Type: text/plain\r\n\
+    \r\n\
+    Server is not configured to serve websocket clients.";
+    use tokio::io::AsyncWriteExt;
+    conn.write(resp.as_bytes()).await?;
+    println!("Rejecting websocket client as server is not configured with websocket feature.");
+    Ok(())
+}
+
+#[cfg(feature = "websocket")]
+async fn handle_ws_conn(addr: SocketAddr, conn: TcpStream, state: &Arc<Mutex<ServerState>>) -> crate::Result<()> {
+    use tokio_tungstenite::tungstenite::{protocol::{Message, frame::{CloseFrame, coding::CloseCode}}, handshake::server::Request};
+    use crate::proto::ws::WSCodec;
+
+    let mut client_valid = true;
+
+    let mut conn = tokio_tungstenite::accept_hdr_async(conn, |req: &Request| {
+        let proto = req.headers.find_first("Sec-WebSocket-Protocol").unwrap_or("".as_bytes()); // Get protocol from headers
+        let proto = std::str::from_utf8(proto).unwrap();
+        if proto.to_lowercase().contains("networktables") {
+            Ok(Some(vec![("Sec-WebSocket-Protocol".to_string(), proto.to_string())]))
+        } else {
+            client_valid = false;
+            Ok(None)
+        }
+    }).await?;
+
+    if !client_valid {
+        println!("Rejecting client for not specifying correct protocol");
+        let frame = CloseFrame {
+            code: CloseCode::Unsupported, // WS 1003
+            reason: Cow::Borrowed("NetworkTables protocol required."),
+        };
+        let msg = Message::Close(Some(frame));
+        conn.send(msg).await?;
+        return Ok(());
+    }
+
+
+    let codec = WSCodec::new(conn);
+
+    let (tx, rx) = unbounded::<Box<dyn Packet>>();
+    state.lock().unwrap().clients.insert(addr, tx);
+    tokio::spawn(client_conn(addr, codec, rx, state.clone()));
     Ok(())
 }
 

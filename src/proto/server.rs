@@ -21,6 +21,13 @@ pub struct ServerState {
     next_id: u16,
 }
 
+fn spawn_rt(ip: String, state: Arc<Mutex<ServerState>>, close_rx: Receiver<()>) {
+    thread::spawn(move || {
+        let mut rt = Runtime::new().unwrap();
+        rt.block_on(conn::connection(ip, state, close_rx)).unwrap();
+    });
+}
+
 impl ServerState {
     pub fn new(ip: String, server_name: String, close_rx: Receiver<()>) -> Arc<Mutex<ServerState>> {
         let state = Arc::new(Mutex::new(ServerState {
@@ -33,10 +40,7 @@ impl ServerState {
         }));
 
         let rt_state = state.clone();
-        thread::spawn(move || {
-            let mut rt = Runtime::new().unwrap();
-            rt.block_on(conn::connection(ip, rt_state, close_rx)).unwrap();
-        });
+        spawn_rt(ip, rt_state, close_rx);
 
         state
     }
@@ -53,10 +57,7 @@ impl ServerState {
         }));
 
         let rt_state = state.clone();
-        thread::spawn(move || {
-            let mut rt = Runtime::new().unwrap();
-            rt.block_on(conn::connection(ip, rt_state, close_rx)).unwrap();
-        });
+        spawn_rt(ip, rt_state, close_rx);
 
         state
     }
