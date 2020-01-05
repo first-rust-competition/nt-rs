@@ -9,10 +9,13 @@ use std::collections::HashMap;
 use nt_network::types::EntryValue;
 use crate::nt::callback::*;
 use crate::proto::{State, NTBackend, Client, client::ClientState, Server};
-use futures_channel::mpsc::{Sender, channel};
+use futures_channel::mpsc::{Sender, channel, unbounded};
 use futures_util::StreamExt;
 use std::net::SocketAddr;
 use crate::proto::server::ServerState;
+use tokio::runtime::Runtime;
+use nt_network::Packet;
+use std::thread;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables<T: NTBackend> {
@@ -31,6 +34,27 @@ impl NetworkTables<Client> {
         Ok(NetworkTables { state, close_tx })
     }
 
+    /// Attempts to reconnect to the NetworkTables server if the connection had been terminated.
+    ///
+    /// This function should _only_ be called if you are certain that the previous connection is dead.
+    /// Connection status can be determined using callbacks specified with `add_connection_callback`.
+    pub async fn reconnect(&mut self) {
+        let rt_state = self.state.clone();
+
+        let (close_tx, close_rx) = channel::<()>(1);
+        let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();
+        let (ready_tx, mut ready_rx) = unbounded();
+
+        self.close_tx = close_tx;
+        self.state.lock().unwrap().packet_tx = packet_tx;
+        thread::spawn(move || {
+            let mut rt = Runtime::new().unwrap();
+            rt.block_on(crate::proto::client::conn::connection(rt_state, packet_rx, ready_tx, close_rx));
+        });
+
+        let _ = ready_rx.next().await;
+    }
+
     /// Connects over websockets to the given ip, with the given client name
     ///
     /// This call will block the thread until the client has completed the handshake with the server,
@@ -42,6 +66,32 @@ impl NetworkTables<Client> {
 
         Ok(NetworkTables { state, close_tx })
     }
+
+    /// Attempts to reconnect over websockets to the NetworkTables instance.
+    ///
+    /// This function should _only_ be called if you are certain that the previous connection is dead.
+    /// Connection status can be determined using callbacks specified with `add_connection_callback`.
+    #[cfg(feature = "websocket")]
+    pub async fn reconnect_ws(&mut self) {
+        let rt_state = self.state.clone();
+
+        let (close_tx, close_rx) = channel::<()>(1);
+        let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();
+        let (ready_tx, mut ready_rx) = unbounded();
+
+        self.close_tx = close_tx;
+        self.state.lock().unwrap().packet_tx = packet_tx;
+        thread::spawn(move || {
+            let mut rt = Runtime::new().unwrap();
+            rt.block_on(crate::proto::client::conn::connection_ws(rt_state, packet_rx, ready_tx, close_rx));
+        });
+
+        let _ = ready_rx.next().await;
+    }
+
+    pub fn add_connection_callback(&self, callback_type: ConnectionCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
+        self.state.lock().unwrap().add_connection_callback(callback_type, action);
+    }
 }
 
 impl NetworkTables<Server> {
@@ -52,19 +102,11 @@ impl NetworkTables<Server> {
         NetworkTables { state, close_tx }
     }
 
-    /// Initializes an NT server over websockets and binds it to the given ip, with the given server name
-    #[cfg(feature = "websocket")]
-    pub fn bind_ws(ip: &str, server_name: &str) -> NetworkTables<Server> {
-        let (close_tx, close_rx) = channel::<()>(1);
-        let state = ServerState::new_ws(ip.to_string(), server_name.to_string(), close_rx);
-        NetworkTables { state, close_tx }
-    }
-
     /// Adds a callback for connection state updates regarding clients.
     ///
     /// Depending on the chosen callback type, the callback will be called when a new client connects,
     /// or when an existing client disconnects from the server
-    pub fn add_connection_callback(&mut self, callback_type: ServerCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
+    pub fn add_connection_callback(&mut self, callback_type: ConnectionCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
         self.state.lock().unwrap().add_server_callback(callback_type, action);
     }
 }

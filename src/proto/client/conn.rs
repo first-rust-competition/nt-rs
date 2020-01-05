@@ -1,13 +1,14 @@
 use crate::proto::client::ClientState;
-use nt_network::{Packet, ReceivedPacket, ClientHelloComplete, ClientHello, NTVersion};
+use nt_network::{Packet, ReceivedPacket, ClientHelloComplete, ClientHello, NTVersion, KeepAlive};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio_util::codec::Decoder;
 use futures_util::StreamExt;
 use futures_util::sink::SinkExt;
 use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender, Receiver};
 use nt_network::codec::NTCodec;
-use crate::{EntryData, CallbackType};
+use crate::{EntryData, CallbackType, ConnectionCallbackType};
 use crate::proto::State;
 use failure::bail;
 use futures_util::future::Either;
@@ -21,38 +22,87 @@ use std::borrow::Cow;
 #[cfg(feature = "websocket")]
 use crate::proto::ws::WSCodec;
 
-pub async fn connection(state: Arc<Mutex<ClientState>>, mut packet_rx: UnboundedReceiver<Box<dyn Packet>>, ip: String, client_name: String, ready_tx: UnboundedSender<()>, close_rx: Receiver<()>) -> crate::Result<()> {
+pub async fn connection(state: Arc<Mutex<ClientState>>, mut packet_rx: UnboundedReceiver<Box<dyn Packet>>, ready_tx: UnboundedSender<()>, close_rx: Receiver<()>) -> crate::Result<()> {
+    let (ip, client_name) = {
+        let state = state.lock().unwrap();
+        (state.ip.clone(), state.name.clone())
+    };
     let conn = TcpStream::connect(ip).await?;
-    let (mut tx, rx) = NTCodec.framed(conn).split();
+    let addr = conn.local_addr().unwrap();
+    let (mut tx, mut rx) = NTCodec.framed(conn).split();
+
+    let rx_state = state.clone();
     tokio::spawn(async move {
-        tx.send(Box::new(ClientHello::new(NTVersion::V3, client_name))).await.unwrap();
-        while let Some(packet) = packet_rx.next().await {
-            tx.send(packet).await.unwrap();
+        while let Some(msg) = rx.next().await {
+            match msg {
+                Ok(packet) => match packet {
+                    ReceivedPacket::ServerHelloComplete => {
+                        ready_tx.unbounded_send(()).unwrap();
+                        let mut state = rx_state.lock().unwrap();
+                        state.connection_callbacks.iter_all_mut()
+                            .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientConnected)
+                            .flat_map(|(_, cbs)| cbs)
+                            .for_each(|cb| cb(&addr));
+                        state.packet_tx.unbounded_send(Box::new(ClientHelloComplete)).unwrap();
+                    }
+                    packet @ _ => handle_packet(packet, &rx_state).unwrap()
+                }
+                Err(_) => {}
+            }
         }
     });
 
-    let mut rx = select(rx.map(Either::Left), close_rx.map(Either::Right));
 
+    let tick_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::new(1, 0));
+
+        loop {
+            tick_state.lock().unwrap().packet_tx.unbounded_send(Box::new(KeepAlive));
+            interval.tick().await;
+        }
+    });
+
+    let mut rx = select(packet_rx.map(Either::Left), close_rx.map(Either::Right));
+
+    let tx_state = state.clone();
+    tx.send(Box::new(ClientHello::new(NTVersion::V3, client_name))).await.unwrap();
     while let Some(msg) = rx.next().await {
         match msg {
-            Either::Left(packet) => if let Ok(packet) = packet {
-                match packet {
-                    ReceivedPacket::ServerHelloComplete => {
-                        ready_tx.unbounded_send(()).unwrap();
-                        state.lock().unwrap().packet_tx.unbounded_send(Box::new(ClientHelloComplete)).unwrap();
+            Either::Left(packet) => match tx.send(packet).await {
+                Ok(_) => {}
+                Err(e) => match e.downcast::<std::io::Error>() {
+                    Ok(e) => if e.kind() == std::io::ErrorKind::BrokenPipe {
+                        // connection terminated
+                        tx_state.lock().unwrap().connection_callbacks.iter_all_mut()
+                            .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientDisconnected)
+                            .flat_map(|(_, cbs)| cbs)
+                            .for_each(|cb| cb(&addr));
+                        return Ok(());
                     }
-                    packet @ _ => handle_packet(packet, &state)?
+                    Err(_) => {}
                 }
-            },
+            }
             Either::Right(_) => return Ok(())
         }
     }
+
     Ok(())
 }
 
 #[cfg(feature = "websocket")]
-pub async fn connection_ws(state: Arc<Mutex<ClientState>>, mut packet_rx: UnboundedReceiver<Box<dyn Packet>>, url: String, client_name: String, ready_tx: UnboundedSender<()>, close_rx: Receiver<()>) -> crate::Result<()> {
+pub async fn connection_ws(state: Arc<Mutex<ClientState>>, mut packet_rx: UnboundedReceiver<Box<dyn Packet>>, ready_tx: UnboundedSender<()>, close_rx: Receiver<()>) -> crate::Result<()> {
+    let (url, client_name) = {
+        let state = state.lock().unwrap();
+        (state.ip.clone(), state.name.clone())
+    };
+
     let url = Url::parse(&url).unwrap();
+
+    let domain = url.host_str().unwrap();
+    let port = url.port().unwrap();
+    let addr = format!("{}:{}", domain, port).parse().unwrap();
+
     let mut req = Request {
         url,
         extra_headers: None,
@@ -72,6 +122,16 @@ pub async fn connection_ws(state: Arc<Mutex<ClientState>>, mut packet_rx: Unboun
         }
     });
 
+    let tick_state = state.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::new(1, 0));
+
+        loop {
+            tick_state.lock().unwrap().packet_tx.unbounded_send(Box::new(KeepAlive));
+            interval.tick().await;
+        }
+    });
+
     let mut rx = select(rx.map(Either::Left), close_rx.map(Either::Right));
 
     while let Some(msg) = rx.next().await {
@@ -85,9 +145,17 @@ pub async fn connection_ws(state: Arc<Mutex<ClientState>>, mut packet_rx: Unboun
                         }
                         packet @ _ => handle_packet(packet, &state)?
                     }
-                    Err(e) => return Err(e.into())
+                    Err(e) => {
+                        state.lock().unwrap()
+                            .connection_callbacks
+                            .iter_all_mut()
+                            .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientDisconnected)
+                            .flat_map(|(_, cbs)| cbs)
+                            .for_each(|cb| cb(&addr));
+                        return Ok(())
+                    }
                 }
-            },
+            }
             Either::Right(_) => return Ok(()),
         }
     }

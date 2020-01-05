@@ -10,7 +10,7 @@ use futures_util::sink::{SinkExt, Sink};
 use nt_network::codec::NTCodec;
 use std::net::{SocketAddr, Shutdown};
 use crate::proto::State;
-use crate::{EntryData, ServerCallbackType, CallbackType};
+use crate::{EntryData, ConnectionCallbackType, CallbackType};
 use futures_util::stream::Stream;
 use std::borrow::Cow;
 use std::pin::Pin;
@@ -135,7 +135,7 @@ async fn client_conn<T>(addr: SocketAddr, conn: T, mut packet_rx: UnboundedRecei
                 ReceivedPacket::ClientHelloComplete => {
                     state.lock().unwrap().server_callbacks
                         .iter_all_mut()
-                        .filter(|(cb, _)| **cb == ServerCallbackType::ClientConnected)
+                        .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientConnected)
                         .flat_map(|(_, cbs)| cbs)
                         .for_each(|cb| cb(&addr))
                 }
@@ -210,7 +210,7 @@ async fn client_conn<T>(addr: SocketAddr, conn: T, mut packet_rx: UnboundedRecei
 
     state.server_callbacks
         .iter_all_mut()
-        .filter(|(cb, _)| **cb == ServerCallbackType::ClientDisconnected)
+        .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientDisconnected)
         .flat_map(|(_, cbs)| cbs)
         .for_each(|cb| cb(&addr));
     Ok(())

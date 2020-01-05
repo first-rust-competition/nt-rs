@@ -1,5 +1,5 @@
 use super::State;
-use crate::{EntryData, CallbackType, EntryValue, Action};
+use crate::{EntryData, CallbackType, EntryValue, Action, ConnectionCallbackType, ConnectionAction};
 use std::collections::HashMap;
 use multimap::MultiMap;
 use tokio::runtime::Runtime;
@@ -8,14 +8,18 @@ use nt_network::{Packet, EntryDelete, EntryUpdate, EntryFlagsUpdate, ClearAllEnt
 use std::thread;
 use std::sync::{Arc, Mutex};
 use futures_util::StreamExt;
+use std::net::SocketAddr;
 
-mod conn;
+pub(crate) mod conn;
 
 pub struct ClientState {
+    ip: String,
+    name: String,
     entries: HashMap<u16, EntryData>,
     callbacks: MultiMap<CallbackType, Box<Action>>,
+    connection_callbacks: MultiMap<ConnectionCallbackType, Box<ConnectionAction>>,
     pending_entries: HashMap<String, Sender<u16>>,
-    packet_tx: UnboundedSender<Box<dyn Packet>>
+    pub(crate) packet_tx: UnboundedSender<Box<dyn Packet>>
 }
 
 impl ClientState {
@@ -24,8 +28,11 @@ impl ClientState {
         let (ready_tx, mut ready_rx) = unbounded::<()>();
 
         let state = Arc::new(Mutex::new(ClientState {
+            ip,
+            name,
             entries: HashMap::new(),
             callbacks: MultiMap::new(),
+            connection_callbacks: MultiMap::new(),
             pending_entries: HashMap::new(),
             packet_tx
         }));
@@ -33,7 +40,7 @@ impl ClientState {
         let rt_state = state.clone();
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
-            rt.block_on(conn::connection(rt_state, packet_rx, ip, name, ready_tx, close_rx)).unwrap();
+            rt.block_on(conn::connection(rt_state, packet_rx, ready_tx, close_rx)).unwrap();
         });
 
         ready_rx.next().await;
@@ -46,8 +53,11 @@ impl ClientState {
         let (ready_tx, mut ready_rx) = unbounded::<()>();
 
         let state = Arc::new(Mutex::new(ClientState {
+            ip: url,
+            name,
             entries: HashMap::new(),
             callbacks: MultiMap::new(),
+            connection_callbacks: MultiMap::new(),
             pending_entries: HashMap::new(),
             packet_tx
         }));
@@ -56,11 +66,15 @@ impl ClientState {
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
 
-            let _ = rt.block_on(conn::connection_ws(rt_state, packet_rx, url, name, ready_tx, close_rx));
+            let _ = rt.block_on(conn::connection_ws(rt_state, packet_rx, ready_tx, close_rx));
         });
 
         ready_rx.next().await;
         state
+    }
+
+    pub fn add_connection_callback(&mut self, callback_type: ConnectionCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
+        self.connection_callbacks.insert(callback_type, Box::new(action));
     }
 }
 

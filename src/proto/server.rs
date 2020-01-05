@@ -1,5 +1,5 @@
 use crate::proto::State;
-use crate::{EntryData, CallbackType, EntryValue, Action, ServerCallbackType, ServerAction};
+use crate::{EntryData, CallbackType, EntryValue, Action, ConnectionCallbackType, ConnectionAction};
 use std::collections::HashMap;
 use futures_channel::mpsc::{Receiver, UnboundedSender, channel};
 use std::net::SocketAddr;
@@ -17,7 +17,7 @@ pub struct ServerState {
     clients: HashMap<SocketAddr, UnboundedSender<Box<dyn Packet>>>,
     entries: HashMap<u16, EntryData>,
     callbacks: MultiMap<CallbackType, Box<Action>>,
-    server_callbacks: MultiMap<ServerCallbackType, Box<ServerAction>>,
+    server_callbacks: MultiMap<ConnectionCallbackType, Box<ConnectionAction>>,
     next_id: u16,
 }
 
@@ -45,24 +45,7 @@ impl ServerState {
         state
     }
 
-    #[cfg(feature = "websocket")]
-    pub fn new_ws(ip: String, server_name: String, close_rx: Receiver<()>) -> Arc<Mutex<ServerState>> {
-        let state = Arc::new(Mutex::new(ServerState {
-            server_name,
-            clients: HashMap::new(),
-            entries: HashMap::new(),
-            callbacks: MultiMap::new(),
-            server_callbacks: MultiMap::new(),
-            next_id: 0
-        }));
-
-        let rt_state = state.clone();
-        spawn_rt(ip, rt_state, close_rx);
-
-        state
-    }
-
-    pub fn add_server_callback(&mut self, callback_type: ServerCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
+    pub fn add_server_callback(&mut self, callback_type: ConnectionCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
         self.server_callbacks.insert(callback_type, Box::new(action));
     }
 }
