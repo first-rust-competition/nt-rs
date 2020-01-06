@@ -108,10 +108,7 @@ pub async fn connection_ws(state: Arc<Mutex<ClientState>>, mut packet_rx: Unboun
         extra_headers: None,
     };
     req.add_protocol(Cow::Borrowed("NetworkTables"));
-    println!("Trying to connect: {:?}", req);
     let (sock, resp) = tokio_tungstenite::connect_async(req).await?;
-
-    println!("Got ws response {:?}", resp);
 
     let (mut tx, rx) = WSCodec::new(sock).split();
 

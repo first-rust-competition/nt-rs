@@ -46,7 +46,12 @@ impl NetworkTables<Client> {
         let (ready_tx, mut ready_rx) = unbounded();
 
         self.close_tx = close_tx;
-        self.state.lock().unwrap().packet_tx = packet_tx;
+        {
+            let mut state = self.state.lock().unwrap();
+            state.packet_tx = packet_tx;
+            state.entries_mut().clear();
+            state.pending_entries.clear();
+        }
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
             rt.block_on(crate::proto::client::conn::connection(rt_state, packet_rx, ready_tx, close_rx));
@@ -80,7 +85,12 @@ impl NetworkTables<Client> {
         let (ready_tx, mut ready_rx) = unbounded();
 
         self.close_tx = close_tx;
-        self.state.lock().unwrap().packet_tx = packet_tx;
+        {
+            let mut state = self.state.lock().unwrap();
+            state.packet_tx = packet_tx;
+            state.entries_mut().clear();
+            state.pending_entries.clear();
+        }
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
             rt.block_on(crate::proto::client::conn::connection_ws(rt_state, packet_rx, ready_tx, close_rx));

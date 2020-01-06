@@ -18,7 +18,7 @@ pub struct ClientState {
     entries: HashMap<u16, EntryData>,
     callbacks: MultiMap<CallbackType, Box<Action>>,
     connection_callbacks: MultiMap<ConnectionCallbackType, Box<ConnectionAction>>,
-    pending_entries: HashMap<String, Sender<u16>>,
+    pub(crate) pending_entries: HashMap<String, Sender<u16>>,
     pub(crate) packet_tx: UnboundedSender<Box<dyn Packet>>
 }
 
