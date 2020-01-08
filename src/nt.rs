@@ -1,21 +1,21 @@
-pub mod entry;
 pub mod callback;
+pub mod entry;
 
 use crate::Result;
 
 pub use self::entry::*;
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use nt_network::types::EntryValue;
 use crate::nt::callback::*;
-use crate::proto::{State, NTBackend, Client, client::ClientState, Server};
-use futures_channel::mpsc::{Sender, channel, unbounded};
-use futures_util::StreamExt;
-use std::net::SocketAddr;
 use crate::proto::server::ServerState;
-use tokio::runtime::Runtime;
+use crate::proto::{client::ClientState, Client, NTBackend, Server, State};
+use futures_channel::mpsc::{channel, unbounded, Sender};
+use futures_util::StreamExt;
+use nt_network::types::EntryValue;
 use nt_network::Packet;
+use std::collections::HashMap;
+use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
 use std::thread;
+use tokio::runtime::Runtime;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables<T: NTBackend> {
@@ -54,7 +54,9 @@ impl NetworkTables<Client> {
         }
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
-            rt.block_on(crate::proto::client::conn::connection(rt_state, packet_rx, ready_tx, close_rx));
+            rt.block_on(crate::proto::client::conn::connection(
+                rt_state, packet_rx, ready_tx, close_rx,
+            )).unwrap();
         });
 
         let _ = ready_rx.next().await;
@@ -93,14 +95,23 @@ impl NetworkTables<Client> {
         }
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
-            rt.block_on(crate::proto::client::conn::connection_ws(rt_state, packet_rx, ready_tx, close_rx));
+            rt.block_on(crate::proto::client::conn::connection_ws(
+                rt_state, packet_rx, ready_tx, close_rx,
+            )).unwrap() ;
         });
 
         let _ = ready_rx.next().await;
     }
 
-    pub fn add_connection_callback(&self, callback_type: ConnectionCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
-        self.state.lock().unwrap().add_connection_callback(callback_type, action);
+    pub fn add_connection_callback(
+        &self,
+        callback_type: ConnectionCallbackType,
+        action: impl FnMut(&SocketAddr) + Send + 'static,
+    ) {
+        self.state
+            .lock()
+            .unwrap()
+            .add_connection_callback(callback_type, action);
     }
 }
 
@@ -116,8 +127,15 @@ impl NetworkTables<Server> {
     ///
     /// Depending on the chosen callback type, the callback will be called when a new client connects,
     /// or when an existing client disconnects from the server
-    pub fn add_connection_callback(&mut self, callback_type: ConnectionCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
-        self.state.lock().unwrap().add_server_callback(callback_type, action);
+    pub fn add_connection_callback(
+        &mut self,
+        callback_type: ConnectionCallbackType,
+        action: impl FnMut(&SocketAddr) + Send + 'static,
+    ) {
+        self.state
+            .lock()
+            .unwrap()
+            .add_server_callback(callback_type, action);
     }
 }
 
@@ -159,7 +177,8 @@ impl<T: NTBackend> NetworkTables<T> {
     /// Depending on what is chosen, the callback will be notified when a new entry is created,
     /// an existing entry is updated, or an existing entry is deleted.
     pub fn add_callback<F>(&mut self, action: CallbackType, cb: F)
-        where F: FnMut(&EntryData) + Send + 'static
+    where
+        F: FnMut(&EntryData) + Send + 'static,
     {
         let mut state = self.state.lock().unwrap();
         state.add_callback(action, cb);

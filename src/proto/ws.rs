@@ -1,20 +1,21 @@
-use tokio::net::TcpStream;
-use tokio_util::codec::{Encoder, Decoder};
-use nt_network::codec::NTCodec;
-use futures_util::stream::Stream;
-use futures_util::sink::Sink;
-use futures_util::task::{Context, Poll};
-use failure::_core::pin::Pin;
-use nt_network::{ReceivedPacket, Packet};
 use bytes::BytesMut;
-use tokio_tungstenite::{WebSocketStream, tungstenite::{Message, handshake::server::{Callback, Request, ErrorResponse}}};
-use http::StatusCode;
+use failure::_core::pin::Pin;
+use futures_util::sink::Sink;
+use futures_util::stream::Stream;
+use futures_util::task::{Context, Poll};
+use nt_network::codec::NTCodec;
+use nt_network::{Packet, ReceivedPacket};
+use tokio::net::TcpStream;
+use tokio_tungstenite::{
+    tungstenite::Message,
+    WebSocketStream,
+};
+use tokio_util::codec::{Decoder, Encoder};
 
 pub struct WSCodec {
     sock: WebSocketStream<TcpStream>,
-    rd: BytesMut
+    rd: BytesMut,
 }
-
 
 impl WSCodec {
     pub fn new(sock: WebSocketStream<TcpStream>) -> WSCodec {
@@ -31,27 +32,26 @@ impl Stream for WSCodec {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if self.rd.is_empty() {
             match futures_util::ready!(Stream::poll_next(Pin::new(&mut self.sock), cx)) {
-                Some(msg) =>
-                    match msg {
-                        Ok(msg) => {
-                            self.rd.extend_from_slice(&msg.into_data()[..]);
-                            match NTCodec.decode(&mut self.rd) {
-                                Ok(Some(packet)) => Poll::Ready(Some(Ok(packet))),
-                                // Server should never split NT packets across multiple websocket packets
-                                Ok(None) => panic!("We shouldn't get here nominally"),
-                                Err(e) => Poll::Ready(Some(Err(e)))
-                            }
+                Some(msg) => match msg {
+                    Ok(msg) => {
+                        self.rd.extend_from_slice(&msg.into_data()[..]);
+                        match NTCodec.decode(&mut self.rd) {
+                            Ok(Some(packet)) => Poll::Ready(Some(Ok(packet))),
+                            // Server should never split NT packets across multiple websocket packets
+                            Ok(None) => panic!("We shouldn't get here nominally"),
+                            Err(e) => Poll::Ready(Some(Err(e))),
                         }
-                        Err(e) => Poll::Ready(Some(Err(e.into())))
                     }
-                None => Poll::Ready(None)
+                    Err(e) => Poll::Ready(Some(Err(e.into()))),
+                },
+                None => Poll::Ready(None),
             }
-        }else {
+        } else {
             match NTCodec.decode(&mut self.rd) {
                 Ok(Some(packet)) => Poll::Ready(Some(Ok(packet))),
                 // Server should never split NT packets across multiple websocket packets
                 Ok(None) => panic!("We shouldn't get here nominally"),
-                Err(e) => Poll::Ready(Some(Err(e)))
+                Err(e) => Poll::Ready(Some(Err(e))),
             }
         }
     }

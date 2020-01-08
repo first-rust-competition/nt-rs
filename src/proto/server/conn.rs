@@ -1,22 +1,26 @@
 use crate::proto::server::ServerState;
-use futures_channel::mpsc::{unbounded, UnboundedReceiver, Receiver};
+use crate::proto::State;
+use crate::{CallbackType, ConnectionCallbackType, EntryData};
+use futures_channel::mpsc::{unbounded, Receiver, UnboundedReceiver};
+use futures_util::sink::{Sink, SinkExt};
+use futures_util::stream::Stream;
+use futures_util::StreamExt;
+use nt_network::codec::NTCodec;
+use nt_network::{
+    EntryAssignment, NTVersion, Packet, ProtocolVersionUnsupported, ReceivedPacket, ServerHello,
+    ServerHelloComplete,
+};
+use std::borrow::Cow;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncBufRead, BufReader};
-use tokio_util::codec::{Framed, Decoder};
-use nt_network::{Packet, ReceivedPacket, NTVersion, ProtocolVersionUnsupported, ServerHello, EntryAssignment, ServerHelloComplete};
-use futures_util::StreamExt;
-use futures_util::sink::{SinkExt, Sink};
-use nt_network::codec::NTCodec;
-use std::net::{SocketAddr, Shutdown};
-use crate::proto::State;
-use crate::{EntryData, ConnectionCallbackType, CallbackType};
-use futures_util::stream::Stream;
-use std::borrow::Cow;
-use std::pin::Pin;
-use bytes::BytesMut;
+use tokio_util::codec::Decoder;
 
-pub async fn connection(ip: String, state: Arc<Mutex<ServerState>>, close_rx: Receiver<()>) -> crate::Result<()> {
+pub async fn connection(
+    ip: String,
+    state: Arc<Mutex<ServerState>>,
+    _close_rx: Receiver<()>,
+) -> crate::Result<()> {
     let mut listener = TcpListener::bind(ip).await?;
 
     //TODO: integrate close_rx
@@ -43,15 +47,17 @@ pub async fn connection(ip: String, state: Arc<Mutex<ServerState>>, close_rx: Re
                 tokio::spawn(client_conn(addr, NTCodec.framed(conn), rx, state.clone()));
             }
         }
-
     }
-    Ok(())
 }
 
 #[cfg(not(feature = "websocket"))]
-async fn handle_ws_conn(_addr: SocketAddr, mut conn: TcpStream, _state: &Arc<Mutex<ServerState>>) -> crate::Result<()> {
+async fn handle_ws_conn(
+    _addr: SocketAddr,
+    mut conn: TcpStream,
+    _state: &Arc<Mutex<ServerState>>,
+) -> crate::Result<()> {
     // no http libs here, so lets make a fun response by hand
-    let resp  ="\
+    let resp = "\
     HTTP/1.1 405 Method Not Allowed\r\n\
     Connection: close\r\n\
     Content-Type: text/plain\r\n\
@@ -64,22 +70,39 @@ async fn handle_ws_conn(_addr: SocketAddr, mut conn: TcpStream, _state: &Arc<Mut
 }
 
 #[cfg(feature = "websocket")]
-async fn handle_ws_conn(addr: SocketAddr, conn: TcpStream, state: &Arc<Mutex<ServerState>>) -> crate::Result<()> {
-    use tokio_tungstenite::tungstenite::{protocol::{Message, frame::{CloseFrame, coding::CloseCode}}, handshake::server::Request};
+async fn handle_ws_conn(
+    addr: SocketAddr,
+    conn: TcpStream,
+    state: &Arc<Mutex<ServerState>>,
+) -> crate::Result<()> {
     use crate::proto::ws::WSCodec;
+    use tokio_tungstenite::tungstenite::{
+        handshake::server::Request,
+        protocol::{
+            frame::{coding::CloseCode, CloseFrame},
+            Message,
+        },
+    };
 
     let mut client_valid = true;
 
     let mut conn = tokio_tungstenite::accept_hdr_async(conn, |req: &Request| {
-        let proto = req.headers.find_first("Sec-WebSocket-Protocol").unwrap_or("".as_bytes()); // Get protocol from headers
+        let proto = req
+            .headers
+            .find_first("Sec-WebSocket-Protocol")
+            .unwrap_or("".as_bytes()); // Get protocol from headers
         let proto = std::str::from_utf8(proto).unwrap();
         if proto.to_lowercase().contains("networktables") {
-            Ok(Some(vec![("Sec-WebSocket-Protocol".to_string(), proto.to_string())]))
+            Ok(Some(vec![(
+                "Sec-WebSocket-Protocol".to_string(),
+                proto.to_string(),
+            )]))
         } else {
             client_valid = false;
             Ok(None)
         }
-    }).await?;
+    })
+    .await?;
 
     if !client_valid {
         println!("Rejecting client for not specifying correct protocol");
@@ -92,7 +115,6 @@ async fn handle_ws_conn(addr: SocketAddr, conn: TcpStream, state: &Arc<Mutex<Ser
         return Ok(());
     }
 
-
     let codec = WSCodec::new(conn);
 
     let (tx, rx) = unbounded::<Box<dyn Packet>>();
@@ -101,8 +123,14 @@ async fn handle_ws_conn(addr: SocketAddr, conn: TcpStream, state: &Arc<Mutex<Ser
     Ok(())
 }
 
-async fn client_conn<T>(addr: SocketAddr, conn: T, mut packet_rx: UnboundedReceiver<Box<dyn Packet>>, state: Arc<Mutex<ServerState>>) -> crate::Result<()>
-    where T: Sink<Box<dyn Packet>> + Stream<Item=crate::Result<ReceivedPacket>> + Send + 'static
+async fn client_conn<T>(
+    addr: SocketAddr,
+    conn: T,
+    mut packet_rx: UnboundedReceiver<Box<dyn Packet>>,
+    state: Arc<Mutex<ServerState>>,
+) -> crate::Result<()>
+where
+    T: Sink<Box<dyn Packet>> + Stream<Item = crate::Result<ReceivedPacket>> + Send + 'static,
 {
     let (mut tx, mut rx) = conn.split();
 
@@ -118,30 +146,47 @@ async fn client_conn<T>(addr: SocketAddr, conn: T, mut packet_rx: UnboundedRecei
             match packet {
                 ReceivedPacket::ClientHello(hello) => {
                     if hello.version != NTVersion::V3 {
-                        state.lock().unwrap().clients[&addr].unbounded_send(Box::new(ProtocolVersionUnsupported::new(NTVersion::V3))).unwrap();
+                        state.lock().unwrap().clients[&addr]
+                            .unbounded_send(Box::new(ProtocolVersionUnsupported::new(
+                                NTVersion::V3,
+                            )))
+                            .unwrap();
                         break;
                     }
-                    let mut state = state.lock().unwrap();
+                    let state = state.lock().unwrap();
                     let tx = &state.clients[&addr];
-                    tx.unbounded_send(Box::new(ServerHello::new(0, state.server_name.clone()))).unwrap();
+                    tx.unbounded_send(Box::new(ServerHello::new(0, state.server_name.clone())))
+                        .unwrap();
 
                     for (id, entry) in state.entries() {
-                        let packet = Box::new(EntryAssignment::new(entry.name.clone(), entry.entry_type(), *id, entry.seqnum, entry.flags, entry.value.clone()));
+                        let packet = Box::new(EntryAssignment::new(
+                            entry.name.clone(),
+                            entry.entry_type(),
+                            *id,
+                            entry.seqnum,
+                            entry.flags,
+                            entry.value.clone(),
+                        ));
                         tx.unbounded_send(packet).unwrap();
                     }
 
                     tx.unbounded_send(Box::new(ServerHelloComplete)).unwrap();
                 }
-                ReceivedPacket::ClientHelloComplete => {
-                    state.lock().unwrap().server_callbacks
-                        .iter_all_mut()
-                        .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientConnected)
-                        .flat_map(|(_, cbs)| cbs)
-                        .for_each(|cb| cb(&addr))
-                }
+                ReceivedPacket::ClientHelloComplete => state
+                    .lock()
+                    .unwrap()
+                    .server_callbacks
+                    .iter_all_mut()
+                    .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientConnected)
+                    .flat_map(|(_, cbs)| cbs)
+                    .for_each(|cb| cb(&addr)),
                 ReceivedPacket::EntryAssignment(ea) => {
                     if ea.entry_id == 0xFFFF {
-                        state.lock().unwrap().create_entry(EntryData::new(ea.entry_name, ea.entry_flags, ea.entry_value));
+                        state.lock().unwrap().create_entry(EntryData::new(
+                            ea.entry_name,
+                            ea.entry_flags,
+                            ea.entry_value,
+                        ));
                     }
                     // should i be evil here? nasal demons are fun
                 }
@@ -153,13 +198,18 @@ async fn client_conn<T>(addr: SocketAddr, conn: T, mut packet_rx: UnboundedRecei
                         }
                         entry.seqnum += 1;
                         let entry = entry.clone();
-                        for tx in state.clients.iter().filter(|(_addr, _)| **_addr != addr)
-                            .map(|(_, tx)| tx) {
+                        for tx in state
+                            .clients
+                            .iter()
+                            .filter(|(_addr, _)| **_addr != addr)
+                            .map(|(_, tx)| tx)
+                        {
                             tx.unbounded_send(Box::new(eu.clone())).unwrap();
                         }
 
-
-                        state.callbacks.iter_all_mut()
+                        state
+                            .callbacks
+                            .iter_all_mut()
                             .filter(|(cb, _)| **cb == CallbackType::Update)
                             .flat_map(|(_, cbs)| cbs)
                             .for_each(|cb| cb(&entry));
@@ -170,8 +220,12 @@ async fn client_conn<T>(addr: SocketAddr, conn: T, mut packet_rx: UnboundedRecei
                     if let Some(entry) = state.entries.get_mut(&efu.entry_id) {
                         entry.flags = efu.entry_flags;
 
-                        for tx in state.clients.iter().filter(|(_addr, _)| **_addr != addr)
-                            .map(|(_, tx)| tx) {
+                        for tx in state
+                            .clients
+                            .iter()
+                            .filter(|(_addr, _)| **_addr != addr)
+                            .map(|(_, tx)| tx)
+                        {
                             tx.unbounded_send(Box::new(efu.clone())).unwrap();
                         }
                     }
@@ -180,12 +234,18 @@ async fn client_conn<T>(addr: SocketAddr, conn: T, mut packet_rx: UnboundedRecei
                     let mut state = state.lock().unwrap();
                     let entry = state.entries.remove(&ed.entry_id).unwrap();
 
-                    for tx in state.clients.iter().filter(|(_addr, _)| **_addr != addr)
-                        .map(|(_, tx)| tx) {
+                    for tx in state
+                        .clients
+                        .iter()
+                        .filter(|(_addr, _)| **_addr != addr)
+                        .map(|(_, tx)| tx)
+                    {
                         tx.unbounded_send(Box::new(ed.clone())).unwrap();
                     }
 
-                    state.callbacks.iter_all_mut()
+                    state
+                        .callbacks
+                        .iter_all_mut()
                         .filter(|(cb, _)| **cb == CallbackType::Delete)
                         .flat_map(|(_, cbs)| cbs)
                         .for_each(|cb| cb(&entry));
@@ -194,8 +254,12 @@ async fn client_conn<T>(addr: SocketAddr, conn: T, mut packet_rx: UnboundedRecei
                     if cea.is_valid() {
                         let mut state = state.lock().unwrap();
                         state.entries.clear();
-                        for tx in state.clients.iter().filter(|(_addr, _)| **_addr != addr)
-                            .map(|(_, tx)| tx) {
+                        for tx in state
+                            .clients
+                            .iter()
+                            .filter(|(_addr, _)| **_addr != addr)
+                            .map(|(_, tx)| tx)
+                        {
                             tx.unbounded_send(Box::new(cea.clone())).unwrap();
                         }
                     }
@@ -208,7 +272,8 @@ async fn client_conn<T>(addr: SocketAddr, conn: T, mut packet_rx: UnboundedRecei
     let mut state = state.lock().unwrap();
     state.clients.remove(&addr);
 
-    state.server_callbacks
+    state
+        .server_callbacks
         .iter_all_mut()
         .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientDisconnected)
         .flat_map(|(_, cbs)| cbs)

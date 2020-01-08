@@ -1,28 +1,33 @@
 use crate::proto::client::ClientState;
-use nt_network::{Packet, ReceivedPacket, ClientHelloComplete, ClientHello, NTVersion, KeepAlive};
+#[cfg(feature = "websocket")]
+use crate::proto::ws::WSCodec;
+use crate::proto::State;
+use crate::{CallbackType, ConnectionCallbackType, EntryData};
+use failure::bail;
+use futures_channel::mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
+use futures_util::future::Either;
+use futures_util::sink::SinkExt;
+use futures_util::stream::select;
+use futures_util::StreamExt;
+use nt_network::codec::NTCodec;
+use nt_network::{ClientHello, ClientHelloComplete, KeepAlive, NTVersion, Packet, ReceivedPacket};
+#[cfg(feature = "websocket")]
+use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::net::TcpStream;
-use tokio_util::codec::Decoder;
-use futures_util::StreamExt;
-use futures_util::sink::SinkExt;
-use futures_channel::mpsc::{UnboundedReceiver, UnboundedSender, Receiver};
-use nt_network::codec::NTCodec;
-use crate::{EntryData, CallbackType, ConnectionCallbackType};
-use crate::proto::State;
-use failure::bail;
-use futures_util::future::Either;
-use futures_util::stream::select;
-#[cfg(feature = "websocket")]
-use url::Url;
 #[cfg(feature = "websocket")]
 use tokio_tungstenite::tungstenite::handshake::client::Request;
+use tokio_util::codec::Decoder;
 #[cfg(feature = "websocket")]
-use std::borrow::Cow;
-#[cfg(feature = "websocket")]
-use crate::proto::ws::WSCodec;
+use url::Url;
 
-pub async fn connection(state: Arc<Mutex<ClientState>>, mut packet_rx: UnboundedReceiver<Box<dyn Packet>>, ready_tx: UnboundedSender<()>, close_rx: Receiver<()>) -> crate::Result<()> {
+pub async fn connection(
+    state: Arc<Mutex<ClientState>>,
+    packet_rx: UnboundedReceiver<Box<dyn Packet>>,
+    ready_tx: UnboundedSender<()>,
+    close_rx: Receiver<()>,
+) -> crate::Result<()> {
     let (ip, client_name) = {
         let state = state.lock().unwrap();
         (state.ip.clone(), state.name.clone())
@@ -39,26 +44,34 @@ pub async fn connection(state: Arc<Mutex<ClientState>>, mut packet_rx: Unbounded
                     ReceivedPacket::ServerHelloComplete => {
                         ready_tx.unbounded_send(()).unwrap();
                         let mut state = rx_state.lock().unwrap();
-                        state.connection_callbacks.iter_all_mut()
+                        state
+                            .connection_callbacks
+                            .iter_all_mut()
                             .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientConnected)
                             .flat_map(|(_, cbs)| cbs)
                             .for_each(|cb| cb(&addr));
-                        state.packet_tx.unbounded_send(Box::new(ClientHelloComplete)).unwrap();
+                        state
+                            .packet_tx
+                            .unbounded_send(Box::new(ClientHelloComplete))
+                            .unwrap();
                     }
-                    packet @ _ => handle_packet(packet, &rx_state).unwrap()
-                }
+                    packet @ _ => handle_packet(packet, &rx_state).unwrap(),
+                },
                 Err(_) => {}
             }
         }
     });
-
 
     let tick_state = state.clone();
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::new(1, 0));
 
         loop {
-            tick_state.lock().unwrap().packet_tx.unbounded_send(Box::new(KeepAlive));
+            let _ = tick_state
+                .lock()
+                .unwrap()
+                .packet_tx
+                .unbounded_send(Box::new(KeepAlive));
             interval.tick().await;
         }
     });
@@ -66,24 +79,34 @@ pub async fn connection(state: Arc<Mutex<ClientState>>, mut packet_rx: Unbounded
     let mut rx = select(packet_rx.map(Either::Left), close_rx.map(Either::Right));
 
     let tx_state = state.clone();
-    tx.send(Box::new(ClientHello::new(NTVersion::V3, client_name))).await.unwrap();
+    tx.send(Box::new(ClientHello::new(NTVersion::V3, client_name)))
+        .await
+        .unwrap();
     while let Some(msg) = rx.next().await {
         match msg {
             Either::Left(packet) => match tx.send(packet).await {
                 Ok(_) => {}
                 Err(e) => match e.downcast::<std::io::Error>() {
-                    Ok(e) => if e.kind() == std::io::ErrorKind::BrokenPipe {
-                        // connection terminated
-                        tx_state.lock().unwrap().connection_callbacks.iter_all_mut()
-                            .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientDisconnected)
-                            .flat_map(|(_, cbs)| cbs)
-                            .for_each(|cb| cb(&addr));
-                        return Ok(());
+                    Ok(e) => {
+                        if e.kind() == std::io::ErrorKind::BrokenPipe {
+                            // connection terminated
+                            tx_state
+                                .lock()
+                                .unwrap()
+                                .connection_callbacks
+                                .iter_all_mut()
+                                .filter(|(cb, _)| {
+                                    **cb == ConnectionCallbackType::ClientDisconnected
+                                })
+                                .flat_map(|(_, cbs)| cbs)
+                                .for_each(|cb| cb(&addr));
+                            return Ok(());
+                        }
                     }
                     Err(_) => {}
-                }
-            }
-            Either::Right(_) => return Ok(())
+                },
+            },
+            Either::Right(_) => return Ok(()),
         }
     }
 
@@ -91,7 +114,12 @@ pub async fn connection(state: Arc<Mutex<ClientState>>, mut packet_rx: Unbounded
 }
 
 #[cfg(feature = "websocket")]
-pub async fn connection_ws(state: Arc<Mutex<ClientState>>, mut packet_rx: UnboundedReceiver<Box<dyn Packet>>, ready_tx: UnboundedSender<()>, close_rx: Receiver<()>) -> crate::Result<()> {
+pub async fn connection_ws(
+    state: Arc<Mutex<ClientState>>,
+    mut packet_rx: UnboundedReceiver<Box<dyn Packet>>,
+    ready_tx: UnboundedSender<()>,
+    close_rx: Receiver<()>,
+) -> crate::Result<()> {
     let (url, client_name) = {
         let state = state.lock().unwrap();
         (state.ip.clone(), state.name.clone())
@@ -108,12 +136,14 @@ pub async fn connection_ws(state: Arc<Mutex<ClientState>>, mut packet_rx: Unboun
         extra_headers: None,
     };
     req.add_protocol(Cow::Borrowed("NetworkTables"));
-    let (sock, resp) = tokio_tungstenite::connect_async(req).await?;
+    let (sock, _resp) = tokio_tungstenite::connect_async(req).await?;
 
     let (mut tx, rx) = WSCodec::new(sock).split();
 
     tokio::spawn(async move {
-        tx.send(Box::new(ClientHello::new(NTVersion::V3, client_name))).await.unwrap();
+        tx.send(Box::new(ClientHello::new(NTVersion::V3, client_name)))
+            .await
+            .unwrap();
         while let Some(packet) = packet_rx.next().await {
             tx.send(packet).await.unwrap();
         }
@@ -124,7 +154,11 @@ pub async fn connection_ws(state: Arc<Mutex<ClientState>>, mut packet_rx: Unboun
         let mut interval = tokio::time::interval(Duration::new(1, 0));
 
         loop {
-            tick_state.lock().unwrap().packet_tx.unbounded_send(Box::new(KeepAlive));
+            let _ = tick_state
+                .lock()
+                .unwrap()
+                .packet_tx
+                .unbounded_send(Box::new(KeepAlive));
             interval.tick().await;
         }
     });
@@ -133,26 +167,31 @@ pub async fn connection_ws(state: Arc<Mutex<ClientState>>, mut packet_rx: Unboun
 
     while let Some(msg) = rx.next().await {
         match msg {
-            Either::Left(packet) => {
-                match packet {
-                    Ok(packet) => match packet {
-                        ReceivedPacket::ServerHelloComplete => {
-                            ready_tx.unbounded_send(()).unwrap();
-                            state.lock().unwrap().packet_tx.unbounded_send(Box::new(ClientHelloComplete)).unwrap();
-                        }
-                        packet @ _ => handle_packet(packet, &state)?
+            Either::Left(packet) => match packet {
+                Ok(packet) => match packet {
+                    ReceivedPacket::ServerHelloComplete => {
+                        ready_tx.unbounded_send(()).unwrap();
+                        state
+                            .lock()
+                            .unwrap()
+                            .packet_tx
+                            .unbounded_send(Box::new(ClientHelloComplete))
+                            .unwrap();
                     }
-                    Err(e) => {
-                        state.lock().unwrap()
-                            .connection_callbacks
-                            .iter_all_mut()
-                            .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientDisconnected)
-                            .flat_map(|(_, cbs)| cbs)
-                            .for_each(|cb| cb(&addr));
-                        return Ok(())
-                    }
+                    packet @ _ => handle_packet(packet, &state)?,
+                },
+                Err(_) => {
+                    state
+                        .lock()
+                        .unwrap()
+                        .connection_callbacks
+                        .iter_all_mut()
+                        .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientDisconnected)
+                        .flat_map(|(_, cbs)| cbs)
+                        .for_each(|cb| cb(&addr));
+                    return Ok(());
                 }
-            }
+            },
             Either::Right(_) => return Ok(()),
         }
     }
@@ -168,7 +207,9 @@ fn handle_packet(packet: ReceivedPacket, state: &Arc<Mutex<ClientState>>) -> cra
             }
 
             let data = EntryData::new(ea.entry_name, ea.entry_flags, ea.entry_value);
-            state.callbacks.iter_all_mut()
+            state
+                .callbacks
+                .iter_all_mut()
                 .filter(|(cb, _)| **cb == CallbackType::Add)
                 .flat_map(|(_, cbs)| cbs)
                 .for_each(|cb| cb(&data));
@@ -177,7 +218,10 @@ fn handle_packet(packet: ReceivedPacket, state: &Arc<Mutex<ClientState>>) -> cra
         ReceivedPacket::KeepAlive => {}
         ReceivedPacket::ClientHello(_) => {}
         ReceivedPacket::ProtocolVersionUnsupported(pvu) => {
-            bail!("Server does not support NTv3. Supported protocol: {}", pvu.supported_version);
+            bail!(
+                "Server does not support NTv3. Supported protocol: {}",
+                pvu.supported_version
+            );
         }
         ReceivedPacket::ServerHello(_) => {}
         ReceivedPacket::ClientHelloComplete => {}
@@ -190,7 +234,9 @@ fn handle_packet(packet: ReceivedPacket, state: &Arc<Mutex<ClientState>>) -> cra
                 // Gross but necessary to ensure unique mutable borrows
                 let entry = entry.clone();
 
-                state.callbacks.iter_all_mut()
+                state
+                    .callbacks
+                    .iter_all_mut()
                     .filter(|(cb, _)| **cb == CallbackType::Update)
                     .flat_map(|(_, cbs)| cbs)
                     .for_each(|cb| cb(&entry));
@@ -205,7 +251,9 @@ fn handle_packet(packet: ReceivedPacket, state: &Arc<Mutex<ClientState>>) -> cra
         ReceivedPacket::EntryDelete(ed) => {
             let mut state = state.lock().unwrap();
             if let Some(data) = state.entries.remove(&ed.entry_id) {
-                state.callbacks.iter_all_mut()
+                state
+                    .callbacks
+                    .iter_all_mut()
                     .filter(|(cb, _)| **cb == CallbackType::Delete)
                     .flat_map(|(_, cbs)| cbs)
                     .for_each(|cb| cb(&data));

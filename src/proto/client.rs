@@ -1,14 +1,18 @@
 use super::State;
-use crate::{EntryData, CallbackType, EntryValue, Action, ConnectionCallbackType, ConnectionAction};
-use std::collections::HashMap;
-use multimap::MultiMap;
-use tokio::runtime::Runtime;
-use futures_channel::mpsc::{unbounded, UnboundedSender, Receiver, Sender, channel};
-use nt_network::{Packet, EntryDelete, EntryUpdate, EntryFlagsUpdate, ClearAllEntries, EntryAssignment};
-use std::thread;
-use std::sync::{Arc, Mutex};
+use crate::{
+    Action, CallbackType, ConnectionAction, ConnectionCallbackType, EntryData, EntryValue,
+};
+use futures_channel::mpsc::{channel, unbounded, Receiver, Sender, UnboundedSender};
 use futures_util::StreamExt;
+use multimap::MultiMap;
+use nt_network::{
+    ClearAllEntries, EntryAssignment, EntryDelete, EntryFlagsUpdate, EntryUpdate, Packet,
+};
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use tokio::runtime::Runtime;
 
 pub(crate) mod conn;
 
@@ -19,7 +23,7 @@ pub struct ClientState {
     callbacks: MultiMap<CallbackType, Box<Action>>,
     connection_callbacks: MultiMap<ConnectionCallbackType, Box<ConnectionAction>>,
     pub(crate) pending_entries: HashMap<String, Sender<u16>>,
-    pub(crate) packet_tx: UnboundedSender<Box<dyn Packet>>
+    pub(crate) packet_tx: UnboundedSender<Box<dyn Packet>>,
 }
 
 impl ClientState {
@@ -34,13 +38,14 @@ impl ClientState {
             callbacks: MultiMap::new(),
             connection_callbacks: MultiMap::new(),
             pending_entries: HashMap::new(),
-            packet_tx
+            packet_tx,
         }));
 
         let rt_state = state.clone();
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
-            rt.block_on(conn::connection(rt_state, packet_rx, ready_tx, close_rx)).unwrap();
+            rt.block_on(conn::connection(rt_state, packet_rx, ready_tx, close_rx))
+                .unwrap();
         });
 
         ready_rx.next().await;
@@ -48,7 +53,11 @@ impl ClientState {
     }
 
     #[cfg(feature = "websocket")]
-    pub async fn new_ws(url: String, name: String, close_rx: Receiver<()>) -> Arc<Mutex<ClientState>> {
+    pub async fn new_ws(
+        url: String,
+        name: String,
+        close_rx: Receiver<()>,
+    ) -> Arc<Mutex<ClientState>> {
         let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();
         let (ready_tx, mut ready_rx) = unbounded::<()>();
 
@@ -59,7 +68,7 @@ impl ClientState {
             callbacks: MultiMap::new(),
             connection_callbacks: MultiMap::new(),
             pending_entries: HashMap::new(),
-            packet_tx
+            packet_tx,
         }));
 
         let rt_state = state.clone();
@@ -73,8 +82,13 @@ impl ClientState {
         state
     }
 
-    pub fn add_connection_callback(&mut self, callback_type: ConnectionCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
-        self.connection_callbacks.insert(callback_type, Box::new(action));
+    pub fn add_connection_callback(
+        &mut self,
+        callback_type: ConnectionCallbackType,
+        action: impl FnMut(&SocketAddr) + Send + 'static,
+    ) {
+        self.connection_callbacks
+            .insert(callback_type, Box::new(action));
     }
 }
 
@@ -90,7 +104,16 @@ impl State for ClientState {
     fn create_entry(&mut self, data: EntryData) -> Receiver<u16> {
         let (tx, rx) = channel::<u16>(1);
         self.pending_entries.insert(data.name.clone(), tx);
-        self.packet_tx.unbounded_send(Box::new(EntryAssignment::new(data.name.clone(), data.entry_type(), 0xFFFF, data.seqnum, data.flags, data.value))).unwrap();
+        self.packet_tx
+            .unbounded_send(Box::new(EntryAssignment::new(
+                data.name.clone(),
+                data.entry_type(),
+                0xFFFF,
+                data.seqnum,
+                data.flags,
+                data.value,
+            )))
+            .unwrap();
         rx
     }
 
@@ -102,23 +125,38 @@ impl State for ClientState {
     fn update_entry(&mut self, id: u16, new_value: EntryValue) {
         if let Some(entry) = self.entries.get_mut(&id) {
             entry.value = new_value.clone();
-            self.packet_tx.unbounded_send(Box::new(EntryUpdate::new(id, entry.seqnum + 1, entry.entry_type(), new_value))).unwrap();
+            self.packet_tx
+                .unbounded_send(Box::new(EntryUpdate::new(
+                    id,
+                    entry.seqnum + 1,
+                    entry.entry_type(),
+                    new_value,
+                )))
+                .unwrap();
         }
     }
 
     fn update_entry_flags(&mut self, id: u16, flags: u8) {
         if let Some(entry) = self.entries.get_mut(&id) {
             entry.flags = flags;
-            self.packet_tx.unbounded_send(Box::new(EntryFlagsUpdate::new(id, flags))).unwrap();
+            self.packet_tx
+                .unbounded_send(Box::new(EntryFlagsUpdate::new(id, flags)))
+                .unwrap();
         }
     }
 
     fn clear_entries(&mut self) {
-        self.packet_tx.unbounded_send(Box::new(ClearAllEntries::new())).unwrap();
+        self.packet_tx
+            .unbounded_send(Box::new(ClearAllEntries::new()))
+            .unwrap();
         self.entries.clear();
     }
 
-    fn add_callback(&mut self, callback_type: CallbackType, action: impl FnMut(&EntryData) + Send + 'static) {
+    fn add_callback(
+        &mut self,
+        callback_type: CallbackType,
+        action: impl FnMut(&EntryData) + Send + 'static,
+    ) {
         self.callbacks.insert(callback_type, Box::new(action));
     }
 }

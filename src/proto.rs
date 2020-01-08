@@ -1,8 +1,7 @@
-
-use nt_network::types::EntryValue;
-use crate::nt::{EntryData, callback::CallbackType};
-use std::collections::HashMap;
+use crate::nt::{callback::CallbackType, EntryData};
 use futures_channel::mpsc::Receiver;
+use nt_network::types::EntryValue;
+use std::collections::HashMap;
 
 pub mod client;
 pub mod server;
@@ -38,5 +37,9 @@ pub trait State {
 
     fn clear_entries(&mut self);
 
-    fn add_callback(&mut self, callback_type: CallbackType, action: impl FnMut(&EntryData) + Send + 'static);
+    fn add_callback(
+        &mut self,
+        callback_type: CallbackType,
+        action: impl FnMut(&EntryData) + Send + 'static,
+    );
 }

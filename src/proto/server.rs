@@ -1,14 +1,17 @@
 use crate::proto::State;
-use crate::{EntryData, CallbackType, EntryValue, Action, ConnectionCallbackType, ConnectionAction};
-use std::collections::HashMap;
-use futures_channel::mpsc::{Receiver, UnboundedSender, channel};
-use std::net::SocketAddr;
-use nt_network::{Packet, EntryAssignment, EntryDelete, EntryUpdate, EntryFlagsUpdate, ClearAllEntries};
+use crate::{
+    Action, CallbackType, ConnectionAction, ConnectionCallbackType, EntryData, EntryValue,
+};
+use futures_channel::mpsc::{channel, Receiver, UnboundedSender};
 use multimap::MultiMap;
+use nt_network::{
+    ClearAllEntries, EntryAssignment, EntryDelete, EntryFlagsUpdate, EntryUpdate, Packet,
+};
+use std::collections::HashMap;
+use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::runtime::Runtime;
-use futures_util::StreamExt;
 
 mod conn;
 
@@ -36,7 +39,7 @@ impl ServerState {
             entries: HashMap::new(),
             callbacks: MultiMap::new(),
             server_callbacks: MultiMap::new(),
-            next_id: 0
+            next_id: 0,
         }));
 
         let rt_state = state.clone();
@@ -45,8 +48,13 @@ impl ServerState {
         state
     }
 
-    pub fn add_server_callback(&mut self, callback_type: ConnectionCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
-        self.server_callbacks.insert(callback_type, Box::new(action));
+    pub fn add_server_callback(
+        &mut self,
+        callback_type: ConnectionCallbackType,
+        action: impl FnMut(&SocketAddr) + Send + 'static,
+    ) {
+        self.server_callbacks
+            .insert(callback_type, Box::new(action));
     }
 }
 
@@ -64,12 +72,20 @@ impl State for ServerState {
         self.next_id += 1;
         self.entries.insert(id, data.clone());
 
-        let packet = Box::new(EntryAssignment::new(data.name.clone(), data.entry_type(), id, data.seqnum, data.flags, data.value.clone()));
+        let packet = Box::new(EntryAssignment::new(
+            data.name.clone(),
+            data.entry_type(),
+            id,
+            data.seqnum,
+            data.flags,
+            data.value.clone(),
+        ));
         for tx in self.clients.values() {
             tx.unbounded_send(packet.clone()).unwrap()
         }
 
-        self.callbacks.iter_all_mut()
+        self.callbacks
+            .iter_all_mut()
             .filter(|(cb, _)| **cb == CallbackType::Add)
             .flat_map(|(_, cbs)| cbs)
             .for_each(|cb| cb(&data));
@@ -87,7 +103,8 @@ impl State for ServerState {
             tx.unbounded_send(packet.clone()).unwrap();
         }
 
-        self.callbacks.iter_all_mut()
+        self.callbacks
+            .iter_all_mut()
             .filter(|(cb, _)| **cb == CallbackType::Delete)
             .flat_map(|(_, cbs)| cbs)
             .for_each(|cb| cb(&entry));
@@ -98,14 +115,20 @@ impl State for ServerState {
             entry.seqnum = entry.seqnum.wrapping_add(1);
             entry.value = new_value;
 
-            let packet = Box::new(EntryUpdate::new(id, entry.seqnum, entry.entry_type(), entry.value.clone()));
+            let packet = Box::new(EntryUpdate::new(
+                id,
+                entry.seqnum,
+                entry.entry_type(),
+                entry.value.clone(),
+            ));
             for tx in self.clients.values() {
                 tx.unbounded_send(packet.clone()).unwrap();
             }
 
             let entry = &*entry;
 
-            self.callbacks.iter_all_mut()
+            self.callbacks
+                .iter_all_mut()
                 .filter(|(cb, _)| **cb == CallbackType::Update)
                 .flat_map(|(_, cbs)| cbs)
                 .for_each(|cb| cb(entry));
@@ -132,7 +155,11 @@ impl State for ServerState {
         }
     }
 
-    fn add_callback(&mut self, callback_type: CallbackType, action: impl FnMut(&EntryData) + Send + 'static) {
+    fn add_callback(
+        &mut self,
+        callback_type: CallbackType,
+        action: impl FnMut(&EntryData) + Send + 'static,
+    ) {
         self.callbacks.insert(callback_type, Box::new(action));
     }
 }

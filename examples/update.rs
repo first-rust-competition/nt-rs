@@ -1,19 +1,25 @@
-extern crate nt;
 extern crate failure;
+extern crate nt;
 
 type Result<T> = std::result::Result<T, failure::Error>;
 
-use nt::{NetworkTables, EntryData, EntryValue};
+use nt::{EntryData, EntryValue, NetworkTables};
 use std::thread;
 use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-//    setup_logger()?;
+    //    setup_logger()?;
 
     let client = NetworkTables::connect("127.0.0.1:1735", "nt-rs").await?;
     println!("Creating entry");
-    let entry_id = client.create_entry(EntryData::new("update1".to_string(), 0, EntryValue::String("Hello!".to_string()))).await;
+    let entry_id = client
+        .create_entry(EntryData::new(
+            "update1".to_string(),
+            0,
+            EntryValue::String("Hello!".to_string()),
+        ))
+        .await;
     println!("Entry created");
 
     {
@@ -29,4 +35,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
