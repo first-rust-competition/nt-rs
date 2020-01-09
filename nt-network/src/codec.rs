@@ -1,8 +1,11 @@
-use tokio_util::codec::{Encoder, Decoder};
-use bytes::{BytesMut, Buf};
 use crate::ext::*;
-use crate::{Result, ClientHello, ProtocolVersionUnsupported, ServerHello, EntryAssignment, EntryUpdate, EntryFlagsUpdate, EntryDelete, ClearAllEntries, Packet};
+use crate::{
+    ClearAllEntries, ClientHello, EntryAssignment, EntryDelete, EntryFlagsUpdate, EntryUpdate,
+    Packet, ProtocolVersionUnsupported, Result, ServerHello,
+};
+use bytes::{Buf, BytesMut};
 use std::io;
+use tokio_util::codec::{Decoder, Encoder};
 
 #[derive(Clone, Debug)]
 pub enum ReceivedPacket {
@@ -16,7 +19,7 @@ pub enum ReceivedPacket {
     EntryUpdate(EntryUpdate),
     EntryFlagsUpdate(EntryFlagsUpdate),
     EntryDelete(EntryDelete),
-    ClearAllEntries(ClearAllEntries)
+    ClearAllEntries(ClearAllEntries),
 }
 
 pub struct NTCodec;
@@ -26,7 +29,6 @@ impl Encoder for NTCodec {
     type Error = failure::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<()> {
-
         dst.put_serializable(&*item);
         Ok(())
     }
@@ -46,13 +48,15 @@ impl Decoder for NTCodec {
         let (packet, bytes) = match try_decode(&mut buf) {
             Ok(t) => t,
             Err(e) => match e.find_root_cause().downcast_ref::<io::Error>() {
-                Some(err) => if err.kind() == io::ErrorKind::UnexpectedEof {
-                    return Ok(None);
-                }else {
-                    return Err(e);
-                },
-                None => return Err(e)
-            }
+                Some(err) => {
+                    if err.kind() == io::ErrorKind::UnexpectedEof {
+                        return Ok(None);
+                    } else {
+                        return Err(e);
+                    }
+                }
+                None => return Err(e),
+            },
         };
 
         src.advance(bytes);
@@ -109,7 +113,7 @@ fn try_decode(mut buf: &mut dyn Buf) -> Result<(ReceivedPacket, usize)> {
             bytes += read;
             Some(ReceivedPacket::ClearAllEntries(packet))
         }
-        _ => None
+        _ => None,
     };
 
     match packet {
@@ -117,4 +121,3 @@ fn try_decode(mut buf: &mut dyn Buf) -> Result<(ReceivedPacket, usize)> {
         None => failure::bail!("Failed to decode packet"),
     }
 }
-

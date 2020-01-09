@@ -1,6 +1,6 @@
-mod packets;
 pub mod codec;
 mod ext;
+mod packets;
 
 use failure::bail;
 
@@ -21,8 +21,7 @@ impl NTVersion {
         match v {
             0x0200 => Ok(NTVersion::V2),
             0x0300 => Ok(NTVersion::V3),
-            _ => bail!("Invalid version passed in packet. {:#x}", v)
+            _ => bail!("Invalid version passed in packet. {:#x}", v),
         }
     }
 }
-
