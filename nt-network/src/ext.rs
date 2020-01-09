@@ -1,7 +1,7 @@
-use bytes::{BytesMut, Buf};
+use bytes::{Buf, BytesMut};
 
-use std::io::{Error, Result, ErrorKind};
 use crate::packets::Packet;
+use std::io::{Error, ErrorKind, Result};
 
 pub trait BytesMutExt {
     fn put_serializable(&mut self, value: &dyn Packet);
@@ -16,7 +16,6 @@ impl BytesMutExt for BytesMut {
 /// Trait containing functions for reading integers from `Buf`
 /// Wraps existing functions, providing a safer API without panics
 pub trait BufExt: Buf {
-
     /// Reads an unsigned byte from `self`
     fn read_u8(&mut self) -> Result<u8> {
         if self.remaining() >= 1 {
