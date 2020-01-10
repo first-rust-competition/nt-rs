@@ -2,7 +2,7 @@ use crate::ext::BufExt;
 use crate::packets::Packet;
 use crate::Result;
 use bytes::{Buf, BufMut, BytesMut};
-use failure::bail;
+use failure::{bail, Fail};
 use nt_leb128::*;
 #[cfg(feature = "wasm-bindgen")]
 use wasm_bindgen::prelude::*;
@@ -80,7 +80,7 @@ impl Packet for f64 {
 
 impl<T: Packet> Packet for Vec<T> {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
-        buf.write_unsigned(self.len() as u64).unwrap();
+        buf.write_unsigned(self.len() as u64)?;
         self.iter().for_each(|value| {
             value.serialize(buf).unwrap();
         });
@@ -104,6 +104,42 @@ impl<T: Packet> Packet for Vec<T> {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum RpcDefinition {
+    V0,
+}
+
+#[derive(Debug, Fail)]
+pub enum RpcError {
+    #[fail(display = "Invalid Rpc Definition: {}", version)]
+    InvalidVersion { version: u8 },
+}
+
+impl Packet for RpcDefinition {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
+        match *self {
+            RpcDefinition::V0 => {
+                buf.write_unsigned(1)?;
+                buf.put_u8(0);
+            }
+        }
+        Ok(())
+    }
+
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
+        let (len, read) = buf.read_unsigned()?;
+        let ver = buf.get_u8();
+        if len == 1 && ver == 0 {
+            Ok((RpcDefinition::V0, len as usize + read))
+        } else {
+            Err(RpcError::InvalidVersion { version: ver }.into())
+        }
+    }
+}
+
 #[cfg_attr(feature = "wasm-bindgen", wasm_bindgen)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum EntryType {
@@ -114,6 +150,7 @@ pub enum EntryType {
     BooleanArray,
     DoubleArray,
     StringArray,
+    RpcDefinition,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -125,6 +162,7 @@ pub enum EntryValue {
     BooleanArray(Vec<bool>),
     DoubleArray(Vec<f64>),
     StringArray(Vec<String>),
+    RpcDefinition(RpcDefinition),
 }
 
 impl EntryValue {
@@ -137,6 +175,7 @@ impl EntryValue {
             EntryValue::BooleanArray(_) => EntryType::BooleanArray,
             EntryValue::DoubleArray(_) => EntryType::DoubleArray,
             EntryValue::StringArray(_) => EntryType::StringArray,
+            EntryValue::RpcDefinition(_) => EntryType::RpcDefinition,
         }
     }
 }
@@ -151,6 +190,7 @@ impl Packet for EntryType {
             EntryType::BooleanArray => buf.put_u8(0x10),
             EntryType::DoubleArray => buf.put_u8(0x11),
             EntryType::StringArray => buf.put_u8(0x12),
+            EntryType::RpcDefinition => buf.put_u8(0x20),
         }
         Ok(())
     }
@@ -168,6 +208,7 @@ impl Packet for EntryType {
             0x10 => EntryType::BooleanArray,
             0x11 => EntryType::DoubleArray,
             0x12 => EntryType::StringArray,
+            0x20 => EntryType::RpcDefinition,
             _ => bail!("Invalid entry type"),
         };
 
@@ -185,6 +226,7 @@ impl EntryType {
             EntryValue::BooleanArray(ref v) => v.serialize(buf)?,
             EntryValue::DoubleArray(ref v) => v.serialize(buf)?,
             EntryValue::StringArray(ref v) => v.serialize(buf)?,
+            EntryValue::RpcDefinition(ref v) => v.serialize(buf)?,
         }
         Ok(())
     }
@@ -225,6 +267,11 @@ impl EntryType {
                 let (v, len) = Vec::<String>::deserialize(buf)?;
                 read += len;
                 EntryValue::StringArray(v)
+            }
+            EntryType::RpcDefinition => {
+                let (v, len) = Packet::deserialize(buf)?;
+                read += len;
+                EntryValue::RpcDefinition(v)
             }
         };
         Ok((value, read))
