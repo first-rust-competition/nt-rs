@@ -364,3 +364,89 @@ impl Packet for ClearAllEntries {
         Ok((ClearAllEntries { magic }, 4))
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct RpcExecute {
+    pub entry_id: u16,
+    pub unique_id: u16,
+    pub parameter: Vec<u8>,
+}
+
+impl RpcExecute {
+    pub fn new(entry_id: u16, unique_id: u16, parameter: Vec<u8>) -> RpcExecute {
+        RpcExecute {
+            entry_id,
+            unique_id,
+            parameter,
+        }
+    }
+}
+
+impl Packet for RpcExecute {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
+        buf.put_u8(0x20);
+        buf.put_u16(self.entry_id);
+        buf.put_u16(self.unique_id);
+        Packet::serialize(&self.parameter, buf)
+    }
+
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
+        let entry_id = buf.read_u16_be()?;
+        let unique_id = buf.read_u16_be()?;
+        let (parameter, len) = Packet::deserialize(buf)?;
+        Ok((
+            RpcExecute {
+                entry_id,
+                unique_id,
+                parameter,
+            },
+            4 + len,
+        ))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RpcResponse {
+    pub entry_id: u16,
+    pub unique_id: u16,
+    pub result: Vec<u8>,
+}
+
+impl RpcResponse {
+    pub fn new(entry_id: u16, unique_id: u16, result: Vec<u8>) -> RpcResponse {
+        RpcResponse {
+            entry_id,
+            unique_id,
+            result,
+        }
+    }
+}
+
+impl Packet for RpcResponse {
+    fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
+        buf.put_u8(0x21);
+        buf.put_u16(self.entry_id);
+        buf.put_u16(self.unique_id);
+        Packet::serialize(&self.result, buf)
+    }
+
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
+        let entry_id = buf.read_u16_be()?;
+        let unique_id = buf.read_u16_be()?;
+        let (result, len) = Packet::deserialize(buf)?;
+        Ok((
+            RpcResponse {
+                entry_id,
+                unique_id,
+                result,
+            },
+            4 + len,
+        ))
+    }
+}
