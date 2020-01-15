@@ -8,16 +8,12 @@ license = "MIT"
 edition = "2018"
 
 [dependencies]
-bytes = "0.4.12"
+bytes = "0.5.2"
 failure = "0.1.5"
 crossbeam-channel = "0.3.8"
 futures = "0.1.27"
-tokio-codec = "0.1.1"
+tokio-util = { version = "0.2.0", features = ["codec"] }
 wasm-bindgen = { version = "0.2.45", optional = true }
-
-[dependencies.nt-leb128]
-version = "0.2.4"
-default-features = false
-features = ["use-bytes"]
+nt-leb128 = "0.3.1"
 
 

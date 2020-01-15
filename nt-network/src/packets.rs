@@ -33,7 +33,7 @@ impl ClientHello {
 impl Packet for ClientHello {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x01);
-        buf.put_u16_be(self.version as u16);
+        buf.put_u16(self.version as u16);
         self.name.serialize(buf)?; // cant use the method on buf because dum
         Ok(())
     }
@@ -107,20 +107,20 @@ impl Packet for EntryAssignment {
         buf.put_u8(0x10);
         self.entry_name.serialize(buf)?;
         self.entry_type.serialize(buf)?;
-        buf.put_u16_be(self.entry_id);
-        buf.put_u16_be(self.entry_seqnum);
+        buf.put_u16(self.entry_id);
+        buf.put_u16(self.entry_seqnum);
         buf.put_u8(self.entry_flags);
         self.entry_type.write_value(&self.entry_value, buf)?;
         Ok(())
     }
 
-    fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
         let (s, mut read) = String::deserialize(buf)?;
         let (ty, bytes) = EntryType::deserialize(buf)?;
         read += bytes;
-        let entry_id = buf.get_u16_be();
-        let entry_seqnum = buf.get_u16_be();
-        let flags = buf.get_u8();
+        let entry_id = buf.read_u16_be()?;
+        let entry_seqnum = buf.read_u16_be()?;
+        let flags = buf.read_u8()?;
         let (value, bytes) = ty.read_value(buf)?;
         read += bytes;
         Ok((EntryAssignment::new(s, ty, entry_id, entry_seqnum, flags, value), 5 + read))
@@ -173,10 +173,18 @@ pub struct ProtocolVersionUnsupported {
     pub supported_version: u16,
 }
 
+impl ProtocolVersionUnsupported {
+    pub fn new(supported_version: NTVersion) -> ProtocolVersionUnsupported {
+        ProtocolVersionUnsupported {
+            supported_version: supported_version as _
+        }
+    }
+}
+
 impl Packet for ProtocolVersionUnsupported {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x02);
-        buf.put_u16_be(self.supported_version);
+        buf.put_u16(self.supported_version);
         Ok(())
     }
 
@@ -208,8 +216,8 @@ impl EntryUpdate {
 impl Packet for EntryUpdate {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x11);
-        buf.put_u16_be(self.entry_id);
-        buf.put_u16_be(self.entry_seqnum);
+        buf.put_u16(self.entry_id);
+        buf.put_u16(self.entry_seqnum);
         self.entry_type.serialize(buf)?;
         self.entry_type.write_value(&self.entry_value, buf)?;
         Ok(())
@@ -243,7 +251,7 @@ impl EntryFlagsUpdate {
 impl Packet for EntryFlagsUpdate {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x12);
-        buf.put_u16_be(self.entry_id);
+        buf.put_u16(self.entry_id);
         buf.put_u8(self.entry_flags);
         Ok(())
     }
@@ -271,7 +279,7 @@ impl EntryDelete {
 impl Packet for EntryDelete {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x13);
-        buf.put_u16_be(self.entry_id);
+        buf.put_u16(self.entry_id);
         Ok(())
     }
 
@@ -301,7 +309,7 @@ impl ClearAllEntries {
 impl Packet for ClearAllEntries {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
         buf.put_u8(0x14);
-        buf.put_u32_be(self.magic);
+        buf.put_u32(self.magic);
         Ok(())
     }
 

@@ -20,19 +20,14 @@ let mut nt = NetworkTables::bind("0.0.0.0:1735", "nt-rs-server");
 ```
 
 ## Websockets
-`nt` 1.0.0 adds support for clients and servers communicating over websockets. This is locked behind the `websockets` feature.
+`nt` 1.0.0 adds support for clients and servers communicating over websockets. This is locked behind the `websocket` feature.
 ### Connecting to a websocket server
 ```rust
 let mut nt = NetworkTables::connect_ws("ws://10.TE.AM.2:1735", "nt-ws-client")?;
 ```
 
 ### Creating a websocket server
-```rust
-let mut nt = NetworkTables::bind_ws("0.0.0.0:1735", "nt-ws-server");
-```
-
-## Network Tables in JavaScript (WIP)
-While `nt` cannot be compiled to wasm directly, due to its dependence on tokio for its runtime, a supplementary crate is provided at `./nt-ws` that is able to be compiled to wasm. This crate only supports a NT client, and uses wasm_bindgen to export a javascript compatible API.
+An existing NetworkTables server is capable of serving websockets if the program is compiled with the websocket feature. In cases where a websocket attempts to connect to a server that has not been configured for websocket clients, it will be sent an error message and the connection will be disconnected.
 
 # License
 This project is licensed under the MIT license.

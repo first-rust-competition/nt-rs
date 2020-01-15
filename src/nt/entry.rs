@@ -1,6 +1,6 @@
-use nt_network::types::{EntryValue, EntryType};
-use crate::NetworkTables;
 use crate::proto::NTBackend;
+use crate::NetworkTables;
+use nt_network::types::{EntryType, EntryValue};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct EntryData {
@@ -20,7 +20,12 @@ impl EntryData {
     }
 
     #[doc(hidden)]
-    pub(crate) fn new_with_seqnum(name: String, flags: u8, value: EntryValue, seqnum: u16) -> EntryData {
+    pub(crate) fn new_with_seqnum(
+        name: String,
+        flags: u8,
+        value: EntryValue,
+        seqnum: u16,
+    ) -> EntryData {
         EntryData {
             name,
             flags,
@@ -37,10 +42,7 @@ pub struct Entry<'a, T: NTBackend> {
 
 impl<'a, T: NTBackend> Entry<'a, T> {
     pub fn new(nt: &'a NetworkTables<T>, id: u16) -> Entry<'a, T> {
-        Entry {
-            nt,
-            id,
-        }
+        Entry { nt, id }
     }
 
     pub fn id(&self) -> &u16 {
@@ -63,4 +65,3 @@ impl<'a, T: NTBackend> Entry<'a, T> {
         self.nt.delete_entry(self.id);
     }
 }
-

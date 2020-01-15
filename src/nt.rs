@@ -1,18 +1,21 @@
-pub mod entry;
 pub mod callback;
+pub mod entry;
 
 use crate::Result;
 
 pub use self::entry::*;
-use std::sync::{Arc, Mutex};
-use std::collections::HashMap;
-use nt_network::types::EntryValue;
 use crate::nt::callback::*;
-use crate::proto::{State, NTBackend, Client, Server, ClientState, ServerState};
-use futures::sync::mpsc::{Sender, channel};
-use futures::Future;
-use futures::sink::Sink;
+use crate::proto::server::ServerState;
+use crate::proto::{client::ClientState, Client, NTBackend, Server, State};
+use futures_channel::mpsc::{channel, unbounded, Sender};
+use futures_util::StreamExt;
+use nt_network::types::EntryValue;
+use nt_network::Packet;
+use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use tokio::runtime::Runtime;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables<T: NTBackend> {
@@ -25,10 +28,39 @@ impl NetworkTables<Client> {
     ///
     /// This call will block the thread until the client has completed the handshake with the server,
     /// at which point the connection will be valid to send and receive data over
-    pub fn connect(ip: &str, client_name: &str) -> Result<NetworkTables<Client>> {
+    pub async fn connect(ip: &str, client_name: &str) -> Result<NetworkTables<Client>> {
         let (close_tx, close_rx) = channel::<()>(1);
-        let state = ClientState::new(ip.to_string(), client_name.to_string(), close_rx)?;
+        let state = ClientState::new(ip.to_string(), client_name.to_string(), close_rx).await;
         Ok(NetworkTables { state, close_tx })
+    }
+
+    /// Attempts to reconnect to the NetworkTables server if the connection had been terminated.
+    ///
+    /// This function should _only_ be called if you are certain that the previous connection is dead.
+    /// Connection status can be determined using callbacks specified with `add_connection_callback`.
+    pub async fn reconnect(&mut self) {
+        let rt_state = self.state.clone();
+
+        let (close_tx, close_rx) = channel::<()>(1);
+        let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();
+        let (ready_tx, mut ready_rx) = unbounded();
+
+        self.close_tx = close_tx;
+        {
+            let mut state = self.state.lock().unwrap();
+            state.packet_tx = packet_tx;
+            state.entries_mut().clear();
+            state.pending_entries.clear();
+        }
+        thread::spawn(move || {
+            let mut rt = Runtime::new().unwrap();
+            rt.block_on(crate::proto::client::conn::connection(
+                rt_state, packet_rx, ready_tx, close_rx,
+            ))
+            .unwrap();
+        });
+
+        let _ = ready_rx.next().await;
     }
 
     /// Connects over websockets to the given ip, with the given client name
@@ -36,11 +68,52 @@ impl NetworkTables<Client> {
     /// This call will block the thread until the client has completed the handshake with the server,
     /// at which point the connection will be valid to send and receive data over
     #[cfg(feature = "websocket")]
-    pub fn connect_ws(ip: &str, client_name: &str) -> Result<NetworkTables<Client>> {
+    pub async fn connect_ws(ip: &str, client_name: &str) -> Result<NetworkTables<Client>> {
         let (close_tx, close_rx) = channel::<()>(1);
-        let state = ClientState::new_ws(ip.to_string(), client_name.to_string(), close_rx)?;
+        let state = ClientState::new_ws(ip.to_string(), client_name.to_string(), close_rx).await;
 
         Ok(NetworkTables { state, close_tx })
+    }
+
+    /// Attempts to reconnect over websockets to the NetworkTables instance.
+    ///
+    /// This function should _only_ be called if you are certain that the previous connection is dead.
+    /// Connection status can be determined using callbacks specified with `add_connection_callback`.
+    #[cfg(feature = "websocket")]
+    pub async fn reconnect_ws(&mut self) {
+        let rt_state = self.state.clone();
+
+        let (close_tx, close_rx) = channel::<()>(1);
+        let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();
+        let (ready_tx, mut ready_rx) = unbounded();
+
+        self.close_tx = close_tx;
+        {
+            let mut state = self.state.lock().unwrap();
+            state.packet_tx = packet_tx;
+            state.entries_mut().clear();
+            state.pending_entries.clear();
+        }
+        thread::spawn(move || {
+            let mut rt = Runtime::new().unwrap();
+            rt.block_on(crate::proto::client::conn::connection_ws(
+                rt_state, packet_rx, ready_tx, close_rx,
+            ))
+            .unwrap();
+        });
+
+        let _ = ready_rx.next().await;
+    }
+
+    pub fn add_connection_callback(
+        &self,
+        callback_type: ConnectionCallbackType,
+        action: impl FnMut(&SocketAddr) + Send + 'static,
+    ) {
+        self.state
+            .lock()
+            .unwrap()
+            .add_connection_callback(callback_type, action);
     }
 }
 
@@ -52,27 +125,19 @@ impl NetworkTables<Server> {
         NetworkTables { state, close_tx }
     }
 
-    /// Initializes an NT server over websockets and binds it to the given ip, with the given server name
-    #[cfg(feature = "websocket")]
-    pub fn bind_ws(ip: &str, server_name: &str) -> NetworkTables<Server> {
-        let (close_tx, close_rx) = channel::<()>(1);
-        let state = ServerState::new_ws(ip.to_string(), server_name.to_string(), close_rx);
-        NetworkTables { state, close_tx }
-    }
-
-    #[cfg(feature = "websocket")]
-    pub fn bind_both(tcp_ip: &str, ws_ip: &str, server_name: &str) -> NetworkTables<Server> {
-        let (close_tx, close_rx) = channel::<()>(1);
-        let state = ServerState::new_both(tcp_ip.to_string(), ws_ip.to_string(), server_name.to_string(), close_rx);
-        NetworkTables { state, close_tx }
-    }
-
     /// Adds a callback for connection state updates regarding clients.
     ///
     /// Depending on the chosen callback type, the callback will be called when a new client connects,
     /// or when an existing client disconnects from the server
-    pub fn add_connection_callback(&mut self, callback_type: ServerCallbackType, action: impl FnMut(&SocketAddr) + Send + 'static) {
-        self.state.lock().unwrap().add_server_callback(callback_type, action);
+    pub fn add_connection_callback(
+        &mut self,
+        callback_type: ConnectionCallbackType,
+        action: impl FnMut(&SocketAddr) + Send + 'static,
+    ) {
+        self.state
+            .lock()
+            .unwrap()
+            .add_server_callback(callback_type, action);
     }
 }
 
@@ -89,9 +154,9 @@ impl<T: NTBackend> NetworkTables<T> {
 
     /// Creates a new entry with the specified data, returning the id assigned to it by the server
     /// This call may block if this connection is acting as a client, while it waits for the id to be assigned by the remote server
-    pub fn create_entry(&self, data: EntryData) -> u16 {
-        let id_rx = self.state.lock().unwrap().create_entry(data);
-        id_rx.recv().unwrap()
+    pub async fn create_entry(&self, data: EntryData) -> u16 {
+        let mut rx = self.state.lock().unwrap().create_entry(data);
+        rx.next().await.unwrap()
     }
 
     /// Deletes the entry with the given id
@@ -114,7 +179,8 @@ impl<T: NTBackend> NetworkTables<T> {
     /// Depending on what is chosen, the callback will be notified when a new entry is created,
     /// an existing entry is updated, or an existing entry is deleted.
     pub fn add_callback<F>(&mut self, action: CallbackType, cb: F)
-        where F: FnMut(&EntryData) + Send + 'static
+    where
+        F: FnMut(&EntryData) + Send + 'static,
     {
         let mut state = self.state.lock().unwrap();
         state.add_callback(action, cb);
@@ -128,6 +194,6 @@ impl<T: NTBackend> NetworkTables<T> {
 
 impl<T: NTBackend> Drop for NetworkTables<T> {
     fn drop(&mut self) {
-        self.close_tx.clone().send(()).wait().unwrap();
+        let _ = self.close_tx.try_send(());
     }
 }

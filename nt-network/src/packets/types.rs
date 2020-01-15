@@ -5,6 +5,7 @@ use bytes::{BufMut, Buf, BytesMut};
 use failure::bail;
 #[cfg(feature = "wasm-bindgen")]
 use wasm_bindgen::prelude::*;
+use crate::ext::BufExt;
 
 impl Packet for String {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
@@ -18,6 +19,9 @@ impl Packet for String {
             let (len, read) = buf.read_unsigned()?;
             (len as usize, read)
         };
+        if buf.remaining() < len {
+            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "String aint there").into());
+        }
         let mut this = vec![0u8; len];
         buf.copy_to_slice(&mut this[..]);
 
@@ -50,12 +54,12 @@ impl Packet for bool {
 
 impl Packet for f64 {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
-        buf.put_f64_be(*self);
+        buf.put_f64(*self);
         Ok(())
     }
 
     fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
-        Ok((buf.get_f64_be(), 8))
+        Ok((buf.get_f64(), 8))
     }
 }
 
@@ -133,8 +137,8 @@ impl Packet for EntryType {
         Ok(())
     }
 
-    fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
-        let value = buf.get_u8();
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+        let value = buf.read_u8()?;
         let entry = match value {
             0x00 => EntryType::Boolean,
             0x01 => EntryType::Double,
@@ -164,17 +168,17 @@ impl EntryType {
         Ok(())
     }
 
-    pub fn read_value(&self, buf: &mut dyn Buf) -> Result<(EntryValue, usize)> {
+    pub fn read_value(&self, mut buf: &mut dyn Buf) -> Result<(EntryValue, usize)> {
         let mut read = 0;
 
         let value = match *self {
             EntryType::Boolean => {
                 read += 1;
-                EntryValue::Boolean(buf.get_u8() == 1)
+                EntryValue::Boolean(buf.read_u8()? == 1)
             }
             EntryType::Double => {
                 read += 8;
-                EntryValue::Double(buf.get_f64_be())
+                EntryValue::Double(buf.read_f64_be()?)
             }
             EntryType::String => {
                 let (s, len) = String::deserialize(buf)?;

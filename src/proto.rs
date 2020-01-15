@@ -1,29 +1,25 @@
-mod client;
-mod server;
-
-#[cfg(feature = "websocket")]
-mod ws;
-
-pub(crate) use self::client::ClientState;
-pub(crate) use self::server::ServerState;
-
+use crate::nt::{callback::CallbackType, EntryData};
+use futures_channel::mpsc::Receiver;
 use nt_network::types::EntryValue;
-use crate::nt::{EntryData, callback::CallbackType};
-use crossbeam_channel::Receiver;
 use std::collections::HashMap;
+
+pub mod client;
+pub mod server;
+#[cfg(feature = "websocket")]
+pub mod ws;
 
 pub trait NTBackend {
     type State: State;
 }
 
-pub struct Server;
-impl NTBackend for Server {
-    type State = ServerState;
-}
-
 pub struct Client;
 impl NTBackend for Client {
-    type State = ClientState;
+    type State = client::ClientState;
+}
+
+pub struct Server;
+impl NTBackend for Server {
+    type State = server::ServerState;
 }
 
 pub trait State {
@@ -41,5 +37,9 @@ pub trait State {
 
     fn clear_entries(&mut self);
 
-    fn add_callback(&mut self, callback_type: CallbackType, action: impl FnMut(&EntryData) + Send + 'static);
+    fn add_callback(
+        &mut self,
+        callback_type: CallbackType,
+        action: impl FnMut(&EntryData) + Send + 'static,
+    );
 }

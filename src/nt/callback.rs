@@ -9,11 +9,11 @@ pub enum CallbackType {
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
-pub enum ServerCallbackType {
+pub enum ConnectionCallbackType {
     ClientConnected,
     ClientDisconnected,
 }
 
-pub type ServerAction = dyn FnMut(&SocketAddr) + Send + 'static;
+pub type ConnectionAction = dyn FnMut(&SocketAddr) + Send + 'static;
 
 pub type Action = dyn FnMut(&EntryData) + Send + 'static;

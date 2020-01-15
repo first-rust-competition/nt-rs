@@ -1,70 +1,78 @@
-use websocket::client::r#async::{Client, TcpStream};
-use nt_network::codec::NTCodec;
-use tokio::prelude::*;
-use tokio::codec::{Encoder, Decoder};
-use nt_network::{ReceivedPacket, Packet};
-use futures::try_ready;
-use websocket::OwnedMessage;
 use bytes::BytesMut;
-use failure::err_msg;
+use failure::_core::pin::Pin;
+use futures_util::sink::Sink;
+use futures_util::stream::Stream;
+use futures_util::task::{Context, Poll};
+use nt_network::codec::NTCodec;
+use nt_network::{Packet, ReceivedPacket};
+use tokio::net::TcpStream;
+use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
+use tokio_util::codec::{Decoder, Encoder};
 
 pub struct WSCodec {
-    sock: Client<TcpStream>,
-    codec: NTCodec,
+    sock: WebSocketStream<TcpStream>,
+    rd: BytesMut,
 }
 
 impl WSCodec {
-    pub fn new(sock: Client<TcpStream>) -> WSCodec {
-        WSCodec { sock, codec: NTCodec }
+    pub fn new(sock: WebSocketStream<TcpStream>) -> WSCodec {
+        WSCodec {
+            sock,
+            rd: BytesMut::new(),
+        }
     }
 }
 
 impl Stream for WSCodec {
-    type Item = ReceivedPacket;
-    type Error = failure::Error;
+    type Item = crate::Result<ReceivedPacket>;
 
-    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let msg: Option<OwnedMessage> = try_ready!(self.sock.poll());
-
-        match msg {
-            Some(OwnedMessage::Binary(bin)) => {
-                let mut bytes = BytesMut::from(bin);
-                match self.codec.decode(&mut bytes) {
-                    Ok(Some(packet)) => Ok(Async::Ready(Some(packet))),
-                    Ok(None) => Ok(Async::NotReady),
-                    Err(e) => Err(e.into())
-                }
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        if self.rd.is_empty() {
+            match futures_util::ready!(Stream::poll_next(Pin::new(&mut self.sock), cx)) {
+                Some(msg) => match msg {
+                    Ok(msg) => {
+                        self.rd.extend_from_slice(&msg.into_data()[..]);
+                        match NTCodec.decode(&mut self.rd) {
+                            Ok(Some(packet)) => Poll::Ready(Some(Ok(packet))),
+                            // Server should never split NT packets across multiple websocket packets
+                            Ok(None) => panic!("We shouldn't get here nominally"),
+                            Err(e) => Poll::Ready(Some(Err(e))),
+                        }
+                    }
+                    Err(e) => Poll::Ready(Some(Err(e.into()))),
+                },
+                None => Poll::Ready(None),
             }
-            Some(_) => Ok(Async::NotReady),
-            None => Ok(Async::Ready(None)),
+        } else {
+            match NTCodec.decode(&mut self.rd) {
+                Ok(Some(packet)) => Poll::Ready(Some(Ok(packet))),
+                // Server should never split NT packets across multiple websocket packets
+                Ok(None) => panic!("We shouldn't get here nominally"),
+                Err(e) => Poll::Ready(Some(Err(e))),
+            }
         }
     }
 }
 
-impl Sink for WSCodec {
-    type SinkItem = Box<dyn Packet>;
-    type SinkError = failure::Error;
+impl Sink<Box<dyn Packet>> for WSCodec {
+    type Error = failure::Error;
 
-    fn start_send(&mut self, item: Self::SinkItem) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
-        match self.poll_complete()? {
-            Async::Ready(()) => {}
-            Async::NotReady => return Ok(AsyncSink::NotReady(item))
-        }
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_ready(Pin::new(&mut self.sock), cx).map_err(Into::into)
+    }
 
+    fn start_send(mut self: Pin<&mut Self>, item: Box<dyn Packet>) -> Result<(), Self::Error> {
         let mut wr = BytesMut::new();
-        self.codec.encode(item, &mut wr)?;
-        match self.sock.start_send(OwnedMessage::Binary(wr.to_vec())) {
-            Ok(AsyncSink::Ready) => Ok(AsyncSink::Ready),
-            Err(e) => Err(e.into()),
-            _ => Err(err_msg("Shouldn't be getting this"))
-        }
+        NTCodec.encode(item, &mut wr).unwrap();
+
+        Sink::start_send(Pin::new(&mut self.sock), Message::Binary(wr.to_vec())).map_err(Into::into)
     }
 
-    fn poll_complete(&mut self) -> Result<Async<()>, Self::SinkError> {
-        self.sock.poll_complete().map_err(|e| e.into())
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_flush(Pin::new(&mut self.sock), cx).map_err(Into::into)
     }
 
-    fn close(&mut self) -> Result<Async<()>, Self::SinkError> {
-        self.sock.close().map_err(|e| e.into())
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Sink::poll_close(Pin::new(&mut self.sock), cx).map_err(Into::into)
     }
 }
