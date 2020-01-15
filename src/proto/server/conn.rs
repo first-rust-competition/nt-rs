@@ -10,7 +10,6 @@ use nt_network::{
     EntryAssignment, NTVersion, Packet, ProtocolVersionUnsupported, ReceivedPacket, ServerHello,
     ServerHelloComplete,
 };
-use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
@@ -226,7 +225,7 @@ where
                             .filter(|(_addr, _)| **_addr != addr)
                             .map(|(_, tx)| tx)
                         {
-                            tx.unbounded_send(Box::new(efu.clone())).unwrap();
+                            tx.unbounded_send(Box::new(efu)).unwrap();
                         }
                     }
                 }
@@ -240,7 +239,7 @@ where
                         .filter(|(_addr, _)| **_addr != addr)
                         .map(|(_, tx)| tx)
                     {
-                        tx.unbounded_send(Box::new(ed.clone())).unwrap();
+                        tx.unbounded_send(Box::new(ed)).unwrap();
                     }
 
                     state
@@ -260,7 +259,7 @@ where
                             .filter(|(_addr, _)| **_addr != addr)
                             .map(|(_, tx)| tx)
                         {
-                            tx.unbounded_send(Box::new(cea.clone())).unwrap();
+                            tx.unbounded_send(Box::new(cea)).unwrap();
                         }
                     }
                 }

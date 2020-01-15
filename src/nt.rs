@@ -56,7 +56,8 @@ impl NetworkTables<Client> {
             let mut rt = Runtime::new().unwrap();
             rt.block_on(crate::proto::client::conn::connection(
                 rt_state, packet_rx, ready_tx, close_rx,
-            )).unwrap();
+            ))
+            .unwrap();
         });
 
         let _ = ready_rx.next().await;
@@ -97,7 +98,8 @@ impl NetworkTables<Client> {
             let mut rt = Runtime::new().unwrap();
             rt.block_on(crate::proto::client::conn::connection_ws(
                 rt_state, packet_rx, ready_tx, close_rx,
-            )).unwrap() ;
+            ))
+            .unwrap();
         });
 
         let _ = ready_rx.next().await;

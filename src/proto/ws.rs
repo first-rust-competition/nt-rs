@@ -6,10 +6,7 @@ use futures_util::task::{Context, Poll};
 use nt_network::codec::NTCodec;
 use nt_network::{Packet, ReceivedPacket};
 use tokio::net::TcpStream;
-use tokio_tungstenite::{
-    tungstenite::Message,
-    WebSocketStream,
-};
+use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
 use tokio_util::codec::{Decoder, Encoder};
 
 pub struct WSCodec {
