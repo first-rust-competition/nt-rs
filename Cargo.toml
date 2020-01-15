@@ -11,7 +11,7 @@ edition = "2018"
 tokio = { version = "0.2", features = ["full"] }
 bytes = "0.5.3"
 failure = "0.1.5"
-nt-network = { path = "./nt-network" }
+nt-network = "2.0.0"
 multimap = "0.5.0"
 nt-leb128 = "0.3.0"
 futures-channel = "0.3"
