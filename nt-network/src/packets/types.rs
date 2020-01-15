@@ -1,11 +1,11 @@
+use crate::ext::BufExt;
 use crate::packets::Packet;
 use crate::Result;
-use nt_leb128::*;
-use bytes::{BufMut, Buf, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use failure::bail;
+use nt_leb128::*;
 #[cfg(feature = "wasm-bindgen")]
 use wasm_bindgen::prelude::*;
-use crate::ext::BufExt;
 
 impl Packet for String {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()> {
@@ -14,13 +14,20 @@ impl Packet for String {
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let (len, read) = {
             let (len, read) = buf.read_unsigned()?;
             (len as usize, read)
         };
         if buf.remaining() < len {
-            return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "String aint there").into());
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "String aint there",
+            )
+            .into());
         }
         let mut this = vec![0u8; len];
         buf.copy_to_slice(&mut this[..]);
@@ -35,7 +42,10 @@ impl Packet for u8 {
         Ok(())
     }
 
-    fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         Ok((buf.get_u8(), 1))
     }
 }
@@ -46,8 +56,11 @@ impl Packet for bool {
         Ok(())
     }
 
-    fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
-        let b = if buf.get_u8() == 1 { true } else { false };
+    fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
+        let b = buf.get_u8() == 1;
         Ok((b, 1))
     }
 }
@@ -58,7 +71,10 @@ impl Packet for f64 {
         Ok(())
     }
 
-    fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         Ok((buf.get_f64(), 8))
     }
 }
@@ -72,7 +88,10 @@ impl<T: Packet> Packet for Vec<T> {
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let (len, mut read) = buf.read_unsigned()?;
         let mut v = Vec::with_capacity(len as usize);
 
@@ -132,12 +151,15 @@ impl Packet for EntryType {
             EntryType::RawData => buf.put_u8(0x03),
             EntryType::BooleanArray => buf.put_u8(0x10),
             EntryType::DoubleArray => buf.put_u8(0x11),
-            EntryType::StringArray => buf.put_u8(0x12)
+            EntryType::StringArray => buf.put_u8(0x12),
         }
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let value = buf.read_u8()?;
         let entry = match value {
             0x00 => EntryType::Boolean,
@@ -147,7 +169,7 @@ impl Packet for EntryType {
             0x10 => EntryType::BooleanArray,
             0x11 => EntryType::DoubleArray,
             0x12 => EntryType::StringArray,
-            _ => bail!("Invalid entry type")
+            _ => bail!("Invalid entry type"),
         };
 
         Ok((entry, 1))
@@ -155,7 +177,7 @@ impl Packet for EntryType {
 }
 
 impl EntryType {
-    pub fn write_value(&self, value: &EntryValue, buf: &mut BytesMut) -> Result<()> {
+    pub fn write_value(self, value: &EntryValue, buf: &mut BytesMut) -> Result<()> {
         match value {
             EntryValue::Boolean(ref b) => b.serialize(buf)?,
             EntryValue::Double(ref d) => d.serialize(buf)?,
@@ -168,10 +190,10 @@ impl EntryType {
         Ok(())
     }
 
-    pub fn read_value(&self, mut buf: &mut dyn Buf) -> Result<(EntryValue, usize)> {
+    pub fn read_value(self, mut buf: &mut dyn Buf) -> Result<(EntryValue, usize)> {
         let mut read = 0;
 
-        let value = match *self {
+        let value = match self {
             EntryType::Boolean => {
                 read += 1;
                 EntryValue::Boolean(buf.read_u8()? == 1)

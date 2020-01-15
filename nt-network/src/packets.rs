@@ -1,14 +1,15 @@
-use crate::{NTVersion, Result};
-use bytes::{Buf, BufMut, BytesMut};
 use crate::ext::*;
 use crate::packets::types::{EntryType, EntryValue};
+use crate::{NTVersion, Result};
+use bytes::{Buf, BufMut, BytesMut};
 
 pub mod types;
 
 pub trait Packet: Send + Sync {
     fn serialize(&self, buf: &mut BytesMut) -> Result<()>;
     fn deserialize(buf: &mut dyn Buf) -> Result<(Self, usize)>
-        where Self: Sized;
+    where
+        Self: Sized;
 }
 
 #[derive(Clone, Debug)]
@@ -23,10 +24,7 @@ impl ClientHello {
             panic!("V2 is not supported");
         }
 
-        ClientHello {
-            version,
-            name,
-        }
+        ClientHello { version, name }
     }
 }
 
@@ -38,13 +36,13 @@ impl Packet for ClientHello {
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let version = NTVersion::from_u16(buf.read_u16_be()?)?;
         let (name, name_bytes) = String::deserialize(buf)?;
-            Ok((ClientHello {
-                version,
-                name,
-            }, 2 + name_bytes))
+        Ok((ClientHello { version, name }, 2 + name_bytes))
     }
 }
 
@@ -56,10 +54,7 @@ pub struct ServerHello {
 
 impl ServerHello {
     pub fn new(flags: u8, name: String) -> ServerHello {
-        ServerHello {
-            flags,
-            name,
-        }
+        ServerHello { flags, name }
     }
 }
 
@@ -71,7 +66,10 @@ impl Packet for ServerHello {
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let flags = buf.read_u8()?;
         let (name, bytes) = String::deserialize(buf)?;
         Ok((ServerHello::new(flags, name), 1 + bytes))
@@ -89,8 +87,14 @@ pub struct EntryAssignment {
 }
 
 impl EntryAssignment {
-    pub fn new(entry_name: String, entry_type: EntryType, entry_id: u16,
-               entry_seqnum: u16, entry_flags: u8, entry_value: EntryValue) -> EntryAssignment {
+    pub fn new(
+        entry_name: String,
+        entry_type: EntryType,
+        entry_id: u16,
+        entry_seqnum: u16,
+        entry_flags: u8,
+        entry_value: EntryValue,
+    ) -> EntryAssignment {
         EntryAssignment {
             entry_name,
             entry_type,
@@ -114,7 +118,10 @@ impl Packet for EntryAssignment {
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let (s, mut read) = String::deserialize(buf)?;
         let (ty, bytes) = EntryType::deserialize(buf)?;
         read += bytes;
@@ -123,7 +130,10 @@ impl Packet for EntryAssignment {
         let flags = buf.read_u8()?;
         let (value, bytes) = ty.read_value(buf)?;
         read += bytes;
-        Ok((EntryAssignment::new(s, ty, entry_id, entry_seqnum, flags, value), 5 + read))
+        Ok((
+            EntryAssignment::new(s, ty, entry_id, entry_seqnum, flags, value),
+            5 + read,
+        ))
     }
 }
 
@@ -136,7 +146,10 @@ impl Packet for ClientHelloComplete {
         Ok(())
     }
 
-    fn deserialize(_buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(_buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         Ok((ClientHelloComplete, 0))
     }
 }
@@ -150,7 +163,10 @@ impl Packet for ServerHelloComplete {
         Ok(())
     }
 
-    fn deserialize(_buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(_buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         Ok((ServerHelloComplete, 0))
     }
 }
@@ -163,7 +179,10 @@ impl Packet for KeepAlive {
         Ok(())
     }
 
-    fn deserialize(_buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(_buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         Ok((KeepAlive, 0))
     }
 }
@@ -176,7 +195,7 @@ pub struct ProtocolVersionUnsupported {
 impl ProtocolVersionUnsupported {
     pub fn new(supported_version: NTVersion) -> ProtocolVersionUnsupported {
         ProtocolVersionUnsupported {
-            supported_version: supported_version as _
+            supported_version: supported_version as _,
         }
     }
 }
@@ -188,7 +207,10 @@ impl Packet for ProtocolVersionUnsupported {
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let supported_version = buf.read_u16_be()?;
         Ok((ProtocolVersionUnsupported { supported_version }, 2))
     }
@@ -199,16 +221,21 @@ pub struct EntryUpdate {
     pub entry_id: u16,
     pub entry_seqnum: u16,
     pub entry_type: EntryType,
-    pub entry_value: EntryValue
+    pub entry_value: EntryValue,
 }
 
 impl EntryUpdate {
-    pub fn new(entry_id: u16, entry_seqnum: u16, entry_type: EntryType, entry_value: EntryValue) -> EntryUpdate {
+    pub fn new(
+        entry_id: u16,
+        entry_seqnum: u16,
+        entry_type: EntryType,
+        entry_value: EntryValue,
+    ) -> EntryUpdate {
         EntryUpdate {
             entry_id,
             entry_seqnum,
             entry_type,
-            entry_value
+            entry_value,
         }
     }
 }
@@ -223,27 +250,33 @@ impl Packet for EntryUpdate {
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let entry_id = buf.read_u16_be()?;
         let entry_seqnum = buf.read_u16_be()?;
         let (entry_type, type_bytes) = EntryType::deserialize(buf)?;
         let (entry_value, value_bytes) = entry_type.read_value(buf)?;
 
-        Ok((EntryUpdate::new(entry_id, entry_seqnum, entry_type, entry_value), 2 + 2 + type_bytes + value_bytes))
+        Ok((
+            EntryUpdate::new(entry_id, entry_seqnum, entry_type, entry_value),
+            2 + 2 + type_bytes + value_bytes,
+        ))
     }
 }
 
 #[derive(Debug, Copy, Clone)]
 pub struct EntryFlagsUpdate {
     pub entry_id: u16,
-    pub entry_flags: u8
+    pub entry_flags: u8,
 }
 
 impl EntryFlagsUpdate {
     pub fn new(entry_id: u16, entry_flags: u8) -> EntryFlagsUpdate {
         EntryFlagsUpdate {
             entry_id,
-            entry_flags
+            entry_flags,
         }
     }
 }
@@ -256,10 +289,19 @@ impl Packet for EntryFlagsUpdate {
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let entry_id = buf.read_u16_be()?;
         let entry_flags = buf.get_u8();
-        Ok((EntryFlagsUpdate { entry_id, entry_flags }, 3))
+        Ok((
+            EntryFlagsUpdate {
+                entry_id,
+                entry_flags,
+            },
+            3,
+        ))
     }
 }
 
@@ -270,9 +312,7 @@ pub struct EntryDelete {
 
 impl EntryDelete {
     pub fn new(entry_id: u16) -> EntryDelete {
-        EntryDelete {
-            entry_id
-        }
+        EntryDelete { entry_id }
     }
 }
 
@@ -283,7 +323,10 @@ impl Packet for EntryDelete {
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let entry_id = buf.read_u16_be()?;
         Ok((EntryDelete { entry_id }, 2))
     }
@@ -291,18 +334,16 @@ impl Packet for EntryDelete {
 
 #[derive(Debug, Copy, Clone)]
 pub struct ClearAllEntries {
-    pub magic: u32
+    pub magic: u32,
 }
 
 impl ClearAllEntries {
     pub const fn new() -> ClearAllEntries {
-        ClearAllEntries {
-            magic: 0xD06CB27A
-        }
+        ClearAllEntries { magic: 0xD06C_B27A }
     }
 
-    pub fn is_valid(&self) -> bool {
-        self.magic == 0xD06CB27A
+    pub fn is_valid(self) -> bool {
+        self.magic == 0xD06C_B27A
     }
 }
 
@@ -313,7 +354,10 @@ impl Packet for ClearAllEntries {
         Ok(())
     }
 
-    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)> where Self: Sized {
+    fn deserialize(mut buf: &mut dyn Buf) -> Result<(Self, usize)>
+    where
+        Self: Sized,
+    {
         let magic = buf.read_u32_be()?;
         Ok((ClearAllEntries { magic }, 4))
     }
