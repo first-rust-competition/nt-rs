@@ -39,8 +39,8 @@ pub async fn connection(
     let rx_state = state.clone();
     tokio::spawn(async move {
         while let Some(msg) = rx.next().await {
-            match msg {
-                Ok(packet) => match packet {
+            if let Ok(packet) = msg {
+                match packet {
                     ReceivedPacket::ServerHelloComplete => {
                         ready_tx.unbounded_send(()).unwrap();
                         let mut state = rx_state.lock().unwrap();
@@ -55,9 +55,8 @@ pub async fn connection(
                             .unbounded_send(Box::new(ClientHelloComplete))
                             .unwrap();
                     }
-                    packet @ _ => handle_packet(packet, &rx_state).unwrap(),
-                },
-                Err(_) => {}
+                    packet => handle_packet(packet, &rx_state).unwrap(),
+                }
             }
         }
     });
@@ -86,8 +85,8 @@ pub async fn connection(
         match msg {
             Either::Left(packet) => match tx.send(packet).await {
                 Ok(_) => {}
-                Err(e) => match e.downcast::<std::io::Error>() {
-                    Ok(e) => {
+                Err(e) => {
+                    if let Ok(e) = e.downcast::<std::io::Error>() {
                         if e.kind() == std::io::ErrorKind::BrokenPipe {
                             // connection terminated
                             tx_state
@@ -103,8 +102,7 @@ pub async fn connection(
                             return Ok(());
                         }
                     }
-                    Err(_) => {}
-                },
+                }
             },
             Either::Right(_) => return Ok(()),
         }
