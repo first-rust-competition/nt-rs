@@ -1,4 +1,6 @@
 use nt::*;
+use std::thread;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -20,5 +22,6 @@ async fn main() -> Result<()> {
                 ),
                 _ => {}
             });
+        thread::sleep(Duration::from_millis(1000));
     }
 }
