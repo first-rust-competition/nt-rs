@@ -70,7 +70,7 @@ impl NetworkTables<Client> {
     #[cfg(feature = "websocket")]
     pub async fn connect_ws(ip: &str, client_name: &str) -> Result<NetworkTables<Client>> {
         let (close_tx, close_rx) = channel::<()>(1);
-        let state = ClientState::new_ws(ip.to_string(), client_name.to_string(), close_rx).await;
+        let state = ClientState::new_ws(ip.to_string(), client_name.to_string(), close_rx).await?;
 
         Ok(NetworkTables { state, close_tx })
     }
@@ -154,9 +154,9 @@ impl<T: NTBackend> NetworkTables<T> {
 
     /// Creates a new entry with the specified data, returning the id assigned to it by the server
     /// This call may block if this connection is acting as a client, while it waits for the id to be assigned by the remote server
-    pub async fn create_entry(&self, data: EntryData) -> u16 {
-        let mut rx = self.state.lock().unwrap().create_entry(data);
-        rx.next().await.unwrap()
+    pub async fn create_entry(&self, data: EntryData) -> crate::Result<u16> {
+        let mut rx = self.state.lock().unwrap().create_entry(data)?;
+        Ok(rx.next().await.unwrap())
     }
 
     /// Deletes the entry with the given id

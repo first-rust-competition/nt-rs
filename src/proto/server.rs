@@ -67,7 +67,7 @@ impl State for ServerState {
         &mut self.entries
     }
 
-    fn create_entry(&mut self, data: EntryData) -> Receiver<u16> {
+    fn create_entry(&mut self, data: EntryData) -> crate::Result<Receiver<u16>> {
         let id = self.next_id;
         self.next_id += 1;
         self.entries.insert(id, data.clone());
@@ -92,7 +92,7 @@ impl State for ServerState {
 
         let (mut tx, rx) = channel(1);
         tx.try_send(id).unwrap();
-        rx
+        Ok(rx)
     }
 
     fn delete_entry(&mut self, id: u16) {

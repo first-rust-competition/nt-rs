@@ -4,7 +4,7 @@ use crate::{CallbackType, ConnectionCallbackType, EntryData};
 use futures_channel::mpsc::{unbounded, Receiver, UnboundedReceiver};
 use futures_util::sink::{Sink, SinkExt};
 use futures_util::stream::Stream;
-use futures_util::StreamExt;
+use futures_util::{StreamExt, TryStreamExt};
 use nt_network::codec::NTCodec;
 use nt_network::{
     EntryAssignment, NTVersion, Packet, ProtocolVersionUnsupported, ReceivedPacket, ServerHello,
@@ -14,6 +14,7 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::Decoder;
+use crate::error::Error;
 
 pub async fn connection(
     ip: String,
@@ -43,7 +44,7 @@ pub async fn connection(
 
                 let (tx, rx) = unbounded::<Box<dyn Packet>>();
                 state.lock().unwrap().clients.insert(addr, tx);
-                tokio::spawn(client_conn(addr, NTCodec.framed(conn), rx, state.clone()));
+                tokio::spawn(client_conn(addr, NTCodec.framed(conn).map_err(Error::from), rx, state.clone()));
             }
         }
     }
@@ -75,8 +76,10 @@ async fn handle_ws_conn(
     state: &Arc<Mutex<ServerState>>,
 ) -> crate::Result<()> {
     use crate::proto::ws::WSCodec;
+    use std::borrow::Cow;
+    use tokio_tungstenite::tungstenite::http::HeaderValue;
     use tokio_tungstenite::tungstenite::{
-        handshake::server::Request,
+        handshake::server::{Request, Response},
         protocol::{
             frame::{coding::CloseCode, CloseFrame},
             Message,
@@ -85,21 +88,21 @@ async fn handle_ws_conn(
 
     let mut client_valid = true;
 
-    let mut conn = tokio_tungstenite::accept_hdr_async(conn, |req: &Request| {
+    let mut conn = tokio_tungstenite::accept_hdr_async(conn, |req: &Request, mut res: Response| {
         let proto = req
-            .headers
-            .find_first("Sec-WebSocket-Protocol")
-            .unwrap_or("".as_bytes()); // Get protocol from headers
+            .headers()
+            .iter()
+            .find(|(name, _)| name.as_str().eq_ignore_ascii_case("Sec-WebSocket-Protocol"))
+            .map(|(_, value)| value.as_bytes())
+            .unwrap_or("".as_bytes());
+
         let proto = std::str::from_utf8(proto).unwrap();
         if proto.to_lowercase().contains("networktables") {
-            Ok(Some(vec![(
-                "Sec-WebSocket-Protocol".to_string(),
-                proto.to_string(),
-            )]))
+            res.headers_mut().insert("Sec-WebSocket-Protocol", HeaderValue::from_str(proto).unwrap());
         } else {
             client_valid = false;
-            Ok(None)
         }
+        Ok(res)
     })
     .await?;
 
@@ -118,7 +121,7 @@ async fn handle_ws_conn(
 
     let (tx, rx) = unbounded::<Box<dyn Packet>>();
     state.lock().unwrap().clients.insert(addr, tx);
-    tokio::spawn(client_conn(addr, codec, rx, state.clone()));
+    tokio::spawn(client_conn(addr, codec.map_err(Error::Other), rx, state.clone()));
     Ok(())
 }
 
@@ -181,7 +184,7 @@ where
                     .for_each(|cb| cb(&addr)),
                 ReceivedPacket::EntryAssignment(ea) => {
                     if ea.entry_id == 0xFFFF {
-                        state.lock().unwrap().create_entry(EntryData::new(
+                        let _ = state.lock().unwrap().create_entry(EntryData::new(
                             ea.entry_name,
                             ea.entry_flags,
                             ea.entry_value,

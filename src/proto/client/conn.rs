@@ -3,7 +3,6 @@ use crate::proto::client::ClientState;
 use crate::proto::ws::WSCodec;
 use crate::proto::State;
 use crate::{CallbackType, ConnectionCallbackType, EntryData};
-use failure::bail;
 use futures_channel::mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
 use futures_util::future::Either;
 use futures_util::sink::SinkExt;
@@ -11,8 +10,6 @@ use futures_util::stream::select;
 use futures_util::StreamExt;
 use nt_network::codec::NTCodec;
 use nt_network::{ClientHello, ClientHelloComplete, KeepAlive, NTVersion, Packet, ReceivedPacket};
-#[cfg(feature = "websocket")]
-use std::borrow::Cow;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::net::TcpStream;
@@ -21,6 +18,7 @@ use tokio_tungstenite::tungstenite::handshake::client::Request;
 use tokio_util::codec::Decoder;
 #[cfg(feature = "websocket")]
 use url::Url;
+use crate::error::Error;
 
 pub async fn connection(
     state: Arc<Mutex<ClientState>>,
@@ -50,6 +48,7 @@ pub async fn connection(
                             .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientConnected)
                             .flat_map(|(_, cbs)| cbs)
                             .for_each(|cb| cb(&addr));
+                        state.connected = true;
                         state
                             .packet_tx
                             .unbounded_send(Box::new(ClientHelloComplete))
@@ -89,9 +88,8 @@ pub async fn connection(
                     if let Ok(e) = e.downcast::<std::io::Error>() {
                         if e.kind() == std::io::ErrorKind::BrokenPipe {
                             // connection terminated
-                            tx_state
-                                .lock()
-                                .unwrap()
+                            let mut state = tx_state.lock().unwrap();
+                            state
                                 .connection_callbacks
                                 .iter_all_mut()
                                 .filter(|(cb, _)| {
@@ -99,6 +97,7 @@ pub async fn connection(
                                 })
                                 .flat_map(|(_, cbs)| cbs)
                                 .for_each(|cb| cb(&addr));
+                            state.connected = false;
                             return Ok(());
                         }
                     }
@@ -118,23 +117,22 @@ pub async fn connection_ws(
     ready_tx: UnboundedSender<()>,
     close_rx: Receiver<()>,
 ) -> crate::Result<()> {
+    use tokio_tungstenite::tungstenite::http::HeaderValue;
     let (url, client_name) = {
         let state = state.lock().unwrap();
         (state.ip.clone(), state.name.clone())
     };
 
-    let url = Url::parse(&url).unwrap();
+    let _url = Url::parse(&url).unwrap();
 
-    let domain = url.host_str().unwrap();
-    let port = url.port().unwrap();
+    let domain = _url.host_str().unwrap();
+    let port = _url.port().unwrap();
     let addr = format!("{}:{}", domain, port).parse().unwrap();
 
-    let mut req = Request {
-        url,
-        extra_headers: None,
-    };
-    req.add_protocol(Cow::Borrowed("NetworkTables"));
+    let req = Request::get(url)
+        .header("Sec-WebSocket-Protocol", HeaderValue::from_str("NetworkTables").unwrap()).body(()).unwrap();
     let (sock, _resp) = tokio_tungstenite::connect_async(req).await?;
+    println!("Connected to remote.");
 
     let (mut tx, rx) = WSCodec::new(sock).split();
 
@@ -169,24 +167,24 @@ pub async fn connection_ws(
                 Ok(packet) => match packet {
                     ReceivedPacket::ServerHelloComplete => {
                         ready_tx.unbounded_send(()).unwrap();
+                        let mut state = state.lock().unwrap();
                         state
-                            .lock()
-                            .unwrap()
                             .packet_tx
                             .unbounded_send(Box::new(ClientHelloComplete))
                             .unwrap();
+                        state.connected = true;
                     }
                     packet @ _ => handle_packet(packet, &state)?,
                 },
                 Err(_) => {
+                    let mut state = state.lock().unwrap();
                     state
-                        .lock()
-                        .unwrap()
                         .connection_callbacks
                         .iter_all_mut()
                         .filter(|(cb, _)| **cb == ConnectionCallbackType::ClientDisconnected)
                         .flat_map(|(_, cbs)| cbs)
                         .for_each(|cb| cb(&addr));
+                    state.connected = false;
                     return Ok(());
                 }
             },
@@ -216,10 +214,7 @@ fn handle_packet(packet: ReceivedPacket, state: &Arc<Mutex<ClientState>>) -> cra
         ReceivedPacket::KeepAlive => {}
         ReceivedPacket::ClientHello(_) => {}
         ReceivedPacket::ProtocolVersionUnsupported(pvu) => {
-            bail!(
-                "Server does not support NTv3. Supported protocol: {}",
-                pvu.supported_version
-            );
+            return Err(Error::UnsupportedProtocolVersion { supported_version: NTVersion::from_u16(pvu.supported_version).unwrap() });
         }
         ReceivedPacket::ServerHello(_) => {}
         ReceivedPacket::ClientHelloComplete => {}

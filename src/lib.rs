@@ -10,9 +10,10 @@ extern crate tokio;
 
 mod nt;
 mod proto;
+pub mod error;
 
 /// Base result type for nt-rs
-pub type Result<T> = std::result::Result<T, failure::Error>;
+pub type Result<T> = std::result::Result<T, error::Error>;
 
 pub use self::nt::callback::*;
 pub use self::nt::entry::EntryData;

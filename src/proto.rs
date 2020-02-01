@@ -27,7 +27,7 @@ pub trait State {
 
     fn entries_mut(&mut self) -> &mut HashMap<u16, EntryData>;
 
-    fn create_entry(&mut self, data: EntryData) -> Receiver<u16>;
+    fn create_entry(&mut self, data: EntryData) -> crate::Result<Receiver<u16>>;
 
     fn delete_entry(&mut self, id: u16);
 

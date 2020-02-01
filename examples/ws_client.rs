@@ -19,7 +19,7 @@ async fn main() {
             0,
             EntryValue::String("bar".to_string()),
         ))
-        .await;
+        .await.expect("Client is not connected to the server.");
     println!("Entry should have been created: {}", id);
     loop {}
 }
