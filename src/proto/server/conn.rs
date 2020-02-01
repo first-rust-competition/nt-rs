@@ -7,8 +7,8 @@ use futures_util::stream::Stream;
 use futures_util::StreamExt;
 use nt_network::codec::NTCodec;
 use nt_network::{
-    EntryAssignment, NTVersion, Packet, ProtocolVersionUnsupported, ReceivedPacket, ServerHello,
-    ServerHelloComplete,
+    EntryAssignment, NTVersion, Packet, ProtocolVersionUnsupported, ReceivedPacket, RpcResponse,
+    ServerHello, ServerHelloComplete,
 };
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
@@ -262,6 +262,19 @@ where
                             tx.unbounded_send(Box::new(cea)).unwrap();
                         }
                     }
+                }
+                ReceivedPacket::RpcExecute(rpc) => {
+                    let state = state.lock().unwrap();
+                    let result = state.call_rpc(rpc.entry_id, rpc.parameter.clone());
+
+                    state.clients.iter().for_each(|(_, tx)| {
+                        tx.unbounded_send(Box::new(RpcResponse::new(
+                            rpc.entry_id,
+                            rpc.unique_id,
+                            result.clone(),
+                        )))
+                        .unwrap()
+                    });
                 }
                 _ => {}
             }

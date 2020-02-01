@@ -1,6 +1,7 @@
 use crate::proto::State;
 use crate::{
     Action, CallbackType, ConnectionAction, ConnectionCallbackType, EntryData, EntryValue,
+    RpcAction,
 };
 use futures_channel::mpsc::{channel, Receiver, UnboundedSender};
 use multimap::MultiMap;
@@ -9,6 +10,9 @@ use nt_network::{
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::panic;
+use std::panic::UnwindSafe;
+
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::runtime::Runtime;
@@ -22,6 +26,7 @@ pub struct ServerState {
     callbacks: MultiMap<CallbackType, Box<Action>>,
     server_callbacks: MultiMap<ConnectionCallbackType, Box<ConnectionAction>>,
     next_id: u16,
+    rpc_actions: HashMap<u16, Box<RpcAction>>,
 }
 
 fn spawn_rt(ip: String, state: Arc<Mutex<ServerState>>, close_rx: Receiver<()>) {
@@ -40,6 +45,7 @@ impl ServerState {
             callbacks: MultiMap::new(),
             server_callbacks: MultiMap::new(),
             next_id: 0,
+            rpc_actions: HashMap::new(),
         }));
 
         let rt_state = state.clone();
@@ -55,6 +61,28 @@ impl ServerState {
     ) {
         self.server_callbacks
             .insert(callback_type, Box::new(action));
+    }
+
+    pub fn create_rpc<'a>(
+        &mut self,
+        data: EntryData,
+        callback:  impl Fn(Vec<u8>) -> Vec<u8> + Send + UnwindSafe + 'a,
+    ) {
+        let id = self.create_entry(data).try_next().unwrap().unwrap();
+        self.rpc_actions.insert(id, Box::new(callback));
+    }
+
+    pub fn call_rpc(&self, id: u16, parameter: Vec<u8>) -> Vec<u8> {
+        let entry = self.entries.get(&id).unwrap();
+        let rpc = self.rpc_actions.get(&id).unwrap();
+
+        match entry.value {
+            EntryValue::RpcDefinition(_) => match panic::catch_unwind(|| rpc(parameter)) {
+                Ok(res) => res,
+                Err(_) => vec![0],
+            },
+            _ => vec![0],
+        }
     }
 }
 
