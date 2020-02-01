@@ -115,6 +115,15 @@ impl NetworkTables<Client> {
             .unwrap()
             .add_connection_callback(callback_type, action);
     }
+
+    pub fn call_rpc(
+        &self,
+        id: u16,
+        parameter: Vec<u8>,
+        callback: impl Fn(Vec<u8>) + Send + 'static,
+    ) {
+        self.state.lock().unwrap().call_rpc(id, parameter, callback);
+    }
 }
 
 impl NetworkTables<Server> {

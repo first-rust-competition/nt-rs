@@ -176,7 +176,7 @@ pub async fn connection_ws(
                             .unbounded_send(Box::new(ClientHelloComplete))
                             .unwrap();
                     }
-                    packet @ _ => handle_packet(packet, &state)?,
+                    packet => handle_packet(packet, &state)?,
                 },
                 Err(_) => {
                     state
@@ -260,6 +260,12 @@ fn handle_packet(packet: ReceivedPacket, state: &Arc<Mutex<ClientState>>) -> cra
         ReceivedPacket::ClearAllEntries(cea) => {
             if cea.is_valid() {
                 state.lock().unwrap().clear_entries();
+            }
+        }
+        ReceivedPacket::RpcResponse(rpc) => {
+            let mut state = state.lock().unwrap();
+            if let Some(callback) = state.rpc_callbacks.remove(&rpc.unique_id) {
+                callback(rpc.result);
             }
         }
         _ => {}
