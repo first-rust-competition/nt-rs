@@ -12,6 +12,7 @@ use nt_network::{
 };
 use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
+use std::thread;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::Decoder;
 
@@ -265,16 +266,28 @@ where
                 }
                 ReceivedPacket::RpcExecute(rpc) => {
                     let state = state.lock().unwrap();
-                    let result = state.call_rpc(rpc.entry_id, rpc.parameter.clone());
+                    let client = state.clients.get(&addr).unwrap().clone();
 
-                    state.clients.iter().for_each(|(_, tx)| {
-                        tx.unbounded_send(Box::new(RpcResponse::new(
-                            rpc.entry_id,
-                            rpc.unique_id,
-                            result.clone(),
-                        )))
-                        .unwrap()
-                    });
+                    if let Some(func) = state.rpc_actions.get(&rpc.entry_id) {
+                        let func = func.clone();
+                        thread::spawn(move || {
+                            client
+                                .unbounded_send(Box::new(RpcResponse::new(
+                                    rpc.entry_id,
+                                    rpc.unique_id,
+                                    func(rpc.parameter),
+                                )))
+                                .unwrap();
+                        });
+                    } else {
+                        client
+                            .unbounded_send(Box::new(RpcResponse::new(
+                                rpc.entry_id,
+                                rpc.unique_id,
+                                Vec::new(),
+                            )))
+                            .unwrap();
+                    }
                 }
                 _ => {}
             }
