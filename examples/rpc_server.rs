@@ -1,4 +1,6 @@
 use nt::*;
+use std::time::Duration;
+use std::thread;
 
 #[tokio::main]
 async fn main() {
@@ -23,9 +25,11 @@ async fn main() {
         ),
         |parameter| {
             let mut sum = 0;
-            for i in parameter {
+            for i in parameter.clone() {
                 sum += i;
             }
+            println!("{:?}", parameter);
+            thread::sleep(Duration::from_millis(1000));
             vec![sum]
         },
     );
