@@ -25,7 +25,7 @@ pub struct ServerState {
     callbacks: MultiMap<CallbackType, Box<Action>>,
     server_callbacks: MultiMap<ConnectionCallbackType, Box<ConnectionAction>>,
     next_id: u16,
-    rpc_actions: HashMap<u16, Box<RpcAction>>,
+    rpc_actions: HashMap<u16, Arc<RpcAction>>,
 }
 
 fn spawn_rt(ip: String, state: Arc<Mutex<ServerState>>, close_rx: Receiver<()>) {
@@ -68,7 +68,7 @@ impl ServerState {
         callback: impl Fn(Vec<u8>) -> Vec<u8> + Send + Sync + RefUnwindSafe + 'static,
     ) {
         let id = self.create_entry(data).try_next().unwrap().unwrap();
-        self.rpc_actions.insert(id, Box::new(callback));
+        self.rpc_actions.insert(id, Arc::new(callback));
     }
 
     pub fn call_rpc(&self, id: u16, parameter: Vec<u8>) -> Vec<u8> {

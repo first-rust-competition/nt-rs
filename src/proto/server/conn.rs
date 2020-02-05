@@ -11,8 +11,8 @@ use nt_network::{
     ServerHello, ServerHelloComplete,
 };
 use std::net::SocketAddr;
+use std::panic;
 use std::sync::{Arc, Mutex};
-use std::thread;
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::Decoder;
 
@@ -268,25 +268,34 @@ where
                     let state = state.lock().unwrap();
                     let client = state.clients.get(&addr).unwrap().clone();
 
-                    if let Some(func) = state.rpc_actions.get(&rpc.entry_id) {
-                        let func = func.clone();
-                        thread::spawn(move || {
+                    match state.rpc_actions.get(&rpc.entry_id) {
+                        Some(func) => {
+                            let func = func.clone();
+                            tokio::spawn(async move {
+                                let result =
+                                    match panic::catch_unwind(|| func(rpc.parameter.clone())) {
+                                        Ok(res) => res,
+                                        Err(_) => Vec::new(),
+                                    };
+
+                                client
+                                    .unbounded_send(Box::new(RpcResponse::new(
+                                        rpc.entry_id,
+                                        rpc.unique_id,
+                                        result,
+                                    )))
+                                    .unwrap();
+                            });
+                        }
+                        None => {
                             client
                                 .unbounded_send(Box::new(RpcResponse::new(
                                     rpc.entry_id,
                                     rpc.unique_id,
-                                    func(rpc.parameter),
+                                    Vec::new(),
                                 )))
                                 .unwrap();
-                        });
-                    } else {
-                        client
-                            .unbounded_send(Box::new(RpcResponse::new(
-                                rpc.entry_id,
-                                rpc.unique_id,
-                                Vec::new(),
-                            )))
-                            .unwrap();
+                        }
                     }
                 }
                 _ => {}
