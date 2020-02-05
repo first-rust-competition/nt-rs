@@ -27,7 +27,7 @@ pub struct ClientState {
     pub(crate) pending_entries: HashMap<String, Sender<u16>>,
     pub(crate) packet_tx: UnboundedSender<Box<dyn Packet>>,
     rpc_callbacks: HashMap<u16, Box<RpcCallback>>,
-    next_id: u16,
+    next_rpc_id: u16,
 }
 
 impl ClientState {
@@ -44,7 +44,7 @@ impl ClientState {
             pending_entries: HashMap::new(),
             packet_tx,
             rpc_callbacks: HashMap::new(),
-            next_id: 0,
+            next_rpc_id: 0,
         }));
 
         let rt_state = state.clone();
@@ -76,7 +76,7 @@ impl ClientState {
             pending_entries: HashMap::new(),
             packet_tx,
             rpc_callbacks: HashMap::new(),
-            next_id: 0,
+            next_rpc_id: 0,
         }));
 
         let rt_state = state.clone();
@@ -105,12 +105,13 @@ impl ClientState {
         parameter: Vec<u8>,
         callback: impl Fn(Vec<u8>) + Send + 'static,
     ) {
-        self.rpc_callbacks.insert(self.next_id, Box::new(callback));
+        self.rpc_callbacks
+            .insert(self.next_rpc_id, Box::new(callback));
         self.packet_tx
-            .unbounded_send(Box::new(RpcExecute::new(id, self.next_id, parameter)))
+            .unbounded_send(Box::new(RpcExecute::new(id, self.next_rpc_id, parameter)))
             .unwrap();
 
-        self.next_id += 1;
+        self.next_rpc_id += 1;
     }
 }
 

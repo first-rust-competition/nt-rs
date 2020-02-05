@@ -19,6 +19,6 @@ pub type ConnectionAction = dyn FnMut(&SocketAddr) + Send + 'static;
 
 pub type Action = dyn FnMut(&EntryData) + Send + 'static;
 
-pub type RpcAction = dyn Fn(Vec<u8>) -> Vec<u8> + Send + RefUnwindSafe + 'static;
+pub type RpcAction = dyn Fn(Vec<u8>) -> Vec<u8> + Send + Sync + RefUnwindSafe + 'static;
 
 pub type RpcCallback = dyn Fn(Vec<u8>) + Send + 'static;

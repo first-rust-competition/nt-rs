@@ -265,7 +265,9 @@ fn handle_packet(packet: ReceivedPacket, state: &Arc<Mutex<ClientState>>) -> cra
         ReceivedPacket::RpcResponse(rpc) => {
             let mut state = state.lock().unwrap();
             if let Some(callback) = state.rpc_callbacks.remove(&rpc.unique_id) {
-                callback(rpc.result);
+                tokio::spawn(async move {
+                    callback(rpc.result);
+                });
             }
         }
         _ => {}

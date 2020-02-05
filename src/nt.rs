@@ -153,7 +153,7 @@ impl NetworkTables<Server> {
     pub fn create_rpc(
         &mut self,
         data: EntryData,
-        callback: impl Fn(Vec<u8>) -> Vec<u8> + Send + RefUnwindSafe + 'static,
+        callback: impl Fn(Vec<u8>) -> Vec<u8> + Send + Sync + RefUnwindSafe + 'static,
     ) {
         self.state.lock().unwrap().create_rpc(data, callback);
     }

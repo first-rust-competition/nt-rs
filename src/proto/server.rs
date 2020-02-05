@@ -10,8 +10,7 @@ use nt_network::{
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::panic;
-use std::panic::RefUnwindSafe;
+use std::panic::{self, RefUnwindSafe};
 
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -66,7 +65,7 @@ impl ServerState {
     pub fn create_rpc(
         &mut self,
         data: EntryData,
-        callback: impl Fn(Vec<u8>) -> Vec<u8> + Send + RefUnwindSafe + 'static,
+        callback: impl Fn(Vec<u8>) -> Vec<u8> + Send + Sync + RefUnwindSafe + 'static,
     ) {
         let id = self.create_entry(data).try_next().unwrap().unwrap();
         self.rpc_actions.insert(id, Box::new(callback));
