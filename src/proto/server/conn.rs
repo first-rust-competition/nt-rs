@@ -10,6 +10,7 @@ use nt_network::{
     EntryAssignment, NTVersion, Packet, ProtocolVersionUnsupported, ReceivedPacket, RpcResponse,
     ServerHello, ServerHelloComplete,
 };
+use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::panic;
 use std::sync::{Arc, Mutex};
@@ -90,7 +91,7 @@ async fn handle_ws_conn(
         let proto = req
             .headers
             .find_first("Sec-WebSocket-Protocol")
-            .unwrap_or("".as_bytes()); // Get protocol from headers
+            .unwrap_or(b""); // Get protocol from headers
         let proto = std::str::from_utf8(proto).unwrap();
         if proto.to_lowercase().contains("networktables") {
             Ok(Some(vec![(
