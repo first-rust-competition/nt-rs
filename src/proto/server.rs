@@ -10,7 +10,7 @@ use nt_network::{
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::panic::{self, RefUnwindSafe};
+use std::panic::RefUnwindSafe;
 
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -69,19 +69,6 @@ impl ServerState {
     ) {
         let id = self.create_entry(data).try_next().unwrap().unwrap();
         self.rpc_actions.insert(id, Arc::new(callback));
-    }
-
-    pub fn call_rpc(&self, id: u16, parameter: Vec<u8>) -> Vec<u8> {
-        let entry = self.entries.get(&id).unwrap();
-        let rpc = self.rpc_actions.get(&id).unwrap();
-
-        match entry.value {
-            EntryValue::RpcDefinition(_) => match panic::catch_unwind(|| rpc(parameter)) {
-                Ok(res) => res,
-                Err(_) => vec![0],
-            },
-            _ => vec![0],
-        }
     }
 }
 

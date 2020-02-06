@@ -157,10 +157,6 @@ impl NetworkTables<Server> {
     ) {
         self.state.lock().unwrap().create_rpc(data, callback);
     }
-
-    pub fn call_rpc(&self, id: u16, parameter: Vec<u8>) -> Vec<u8> {
-        self.state.lock().unwrap().call_rpc(id, parameter)
-    }
 }
 
 impl<T: NTBackend> NetworkTables<T> {
