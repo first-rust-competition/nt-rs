@@ -13,6 +13,7 @@ use nt_network::types::EntryValue;
 use nt_network::Packet;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::panic::RefUnwindSafe;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::runtime::Runtime;
@@ -115,6 +116,15 @@ impl NetworkTables<Client> {
             .unwrap()
             .add_connection_callback(callback_type, action);
     }
+
+    pub fn call_rpc(
+        &self,
+        id: u16,
+        parameter: Vec<u8>,
+        callback: impl Fn(Vec<u8>) + Send + 'static,
+    ) {
+        self.state.lock().unwrap().call_rpc(id, parameter, callback);
+    }
 }
 
 impl NetworkTables<Server> {
@@ -138,6 +148,14 @@ impl NetworkTables<Server> {
             .lock()
             .unwrap()
             .add_server_callback(callback_type, action);
+    }
+
+    pub fn create_rpc(
+        &mut self,
+        data: EntryData,
+        callback: impl Fn(Vec<u8>) -> Vec<u8> + Send + Sync + RefUnwindSafe + 'static,
+    ) {
+        self.state.lock().unwrap().create_rpc(data, callback);
     }
 }
 

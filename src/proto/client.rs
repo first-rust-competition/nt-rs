@@ -1,12 +1,14 @@
 use super::State;
 use crate::{
     Action, CallbackType, ConnectionAction, ConnectionCallbackType, EntryData, EntryValue,
+    RpcCallback,
 };
 use futures_channel::mpsc::{channel, unbounded, Receiver, Sender, UnboundedSender};
 use futures_util::StreamExt;
 use multimap::MultiMap;
 use nt_network::{
     ClearAllEntries, EntryAssignment, EntryDelete, EntryFlagsUpdate, EntryUpdate, Packet,
+    RpcExecute,
 };
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -24,6 +26,8 @@ pub struct ClientState {
     connection_callbacks: MultiMap<ConnectionCallbackType, Box<ConnectionAction>>,
     pub(crate) pending_entries: HashMap<String, Sender<u16>>,
     pub(crate) packet_tx: UnboundedSender<Box<dyn Packet>>,
+    rpc_callbacks: HashMap<u16, Box<RpcCallback>>,
+    next_rpc_id: u16,
 }
 
 impl ClientState {
@@ -39,6 +43,8 @@ impl ClientState {
             connection_callbacks: MultiMap::new(),
             pending_entries: HashMap::new(),
             packet_tx,
+            rpc_callbacks: HashMap::new(),
+            next_rpc_id: 0,
         }));
 
         let rt_state = state.clone();
@@ -69,6 +75,8 @@ impl ClientState {
             connection_callbacks: MultiMap::new(),
             pending_entries: HashMap::new(),
             packet_tx,
+            rpc_callbacks: HashMap::new(),
+            next_rpc_id: 0,
         }));
 
         let rt_state = state.clone();
@@ -89,6 +97,21 @@ impl ClientState {
     ) {
         self.connection_callbacks
             .insert(callback_type, Box::new(action));
+    }
+
+    pub fn call_rpc(
+        &mut self,
+        id: u16,
+        parameter: Vec<u8>,
+        callback: impl Fn(Vec<u8>) + Send + 'static,
+    ) {
+        self.rpc_callbacks
+            .insert(self.next_rpc_id, Box::new(callback));
+        self.packet_tx
+            .unbounded_send(Box::new(RpcExecute::new(id, self.next_rpc_id, parameter)))
+            .unwrap();
+
+        self.next_rpc_id += 1;
     }
 }
 
