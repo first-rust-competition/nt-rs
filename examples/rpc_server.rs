@@ -1,6 +1,6 @@
 use nt::*;
-use std::time::Duration;
 use std::thread;
+use std::time::Duration;
 
 #[tokio::main]
 async fn main() {
@@ -29,7 +29,7 @@ async fn main() {
                 sum += i;
             }
             println!("{:?}", parameter);
-            thread::sleep(Duration::from_millis(1000));
+            thread::sleep(Duration::from_millis(600));
             vec![sum]
         },
     );

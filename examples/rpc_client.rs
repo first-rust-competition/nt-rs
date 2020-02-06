@@ -13,16 +13,14 @@ async fn main() -> Result<()> {
             .entries()
             .iter()
             .for_each(|(id, entry)| match entry.value {
-                EntryValue::RpcDefinition(RpcDefinition::V0) => client.call_rpc(
-                    *id,
-                    (0..i).collect(),
-                    |res| {
+                EntryValue::RpcDefinition(RpcDefinition::V0) => {
+                    client.call_rpc(*id, (0..(i % 20)).collect(), |res| {
                         println!("RECEIVED RESPONSE: {:?}", res);
-                    },
-                ),
+                    })
+                }
                 _ => {}
             });
         thread::sleep(Duration::from_millis(100));
-        i+=1;
+        i += 1;
     }
 }
