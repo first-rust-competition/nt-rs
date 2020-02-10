@@ -33,3 +33,10 @@ impl From<failure::Error> for Error {
         Error::Other { cause }
     }
 }
+
+#[cfg(feature = "websocket")]
+impl From<tokio_tungstenite::tungstenite::error::Error> for Error {
+    fn from(err: tokio_tungstenite::tungstenite::error::Error) -> Self {
+        Error::Other { cause: err.into() }
+    }
+}

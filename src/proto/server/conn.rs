@@ -10,7 +10,6 @@ use nt_network::{
     EntryAssignment, NTVersion, Packet, ProtocolVersionUnsupported, ReceivedPacket, RpcResponse,
     ServerHello, ServerHelloComplete,
 };
-use std::borrow::Cow;
 use std::net::SocketAddr;
 use std::panic;
 use std::sync::{Arc, Mutex};
@@ -91,11 +90,11 @@ async fn handle_ws_conn(
     let mut client_valid = true;
 
     let mut conn = tokio_tungstenite::accept_hdr_async(conn, |req: &Request, mut res: Response| {
+        let default = HeaderValue::from_static("");
         let proto = req
-            .headers
-            .find_first("Sec-WebSocket-Protocol")
-            .unwrap_or(b""); // Get protocol from headers
-        let proto = std::str::from_utf8(proto).unwrap();
+            .headers()
+            .get("Sec-WebSocket-Protocol")
+            .unwrap_or(&default).to_str().unwrap(); // Get protocol from headers
         if proto.to_lowercase().contains("networktables") {
             res.headers_mut().insert("Sec-WebSocket-Protocol", HeaderValue::from_str(proto).unwrap());
         } else {
@@ -120,7 +119,7 @@ async fn handle_ws_conn(
 
     let (tx, rx) = unbounded::<Box<dyn Packet>>();
     state.lock().unwrap().clients.insert(addr, tx);
-    tokio::spawn(client_conn(addr, codec.map_err(Error::Other), rx, state.clone()));
+    tokio::spawn(client_conn(addr, codec.map_err(Error::from), rx, state.clone()));
     Ok(())
 }
 

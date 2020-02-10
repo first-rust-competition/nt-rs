@@ -36,7 +36,7 @@ impl Stream for WSCodec {
                             Ok(Some(packet)) => Poll::Ready(Some(Ok(packet))),
                             // Server should never split NT packets across multiple websocket packets
                             Ok(None) => panic!("We shouldn't get here nominally"),
-                            Err(e) => Poll::Ready(Some(Err(e))),
+                            Err(e) => Poll::Ready(Some(Err(e.into()))),
                         }
                     }
                     Err(e) => Poll::Ready(Some(Err(e.into()))),
@@ -48,7 +48,7 @@ impl Stream for WSCodec {
                 Ok(Some(packet)) => Poll::Ready(Some(Ok(packet))),
                 // Server should never split NT packets across multiple websocket packets
                 Ok(None) => panic!("We shouldn't get here nominally"),
-                Err(e) => Poll::Ready(Some(Err(e))),
+                Err(e) => Poll::Ready(Some(Err(e.into()))),
             }
         }
     }
