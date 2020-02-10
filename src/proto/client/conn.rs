@@ -174,7 +174,7 @@ pub async fn connection_ws(
                             .unwrap();
                         state.connected = true;
                     }
-                    packet @ _ => handle_packet(packet, &state)?,
+                    packet => handle_packet(packet, &state)?,
                 },
                 Err(_) => {
                     let mut state = state.lock().unwrap();
@@ -255,6 +255,14 @@ fn handle_packet(packet: ReceivedPacket, state: &Arc<Mutex<ClientState>>) -> cra
         ReceivedPacket::ClearAllEntries(cea) => {
             if cea.is_valid() {
                 state.lock().unwrap().clear_entries();
+            }
+        }
+        ReceivedPacket::RpcResponse(rpc) => {
+            let mut state = state.lock().unwrap();
+            if let Some(callback) = state.rpc_callbacks.remove(&rpc.unique_id) {
+                tokio::spawn(async move {
+                    callback(rpc.result);
+                });
             }
         }
         _ => {}

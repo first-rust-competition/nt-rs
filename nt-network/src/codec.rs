@@ -1,7 +1,7 @@
 use crate::ext::*;
 use crate::{
     ClearAllEntries, ClientHello, EntryAssignment, EntryDelete, EntryFlagsUpdate, EntryUpdate,
-    Packet, ProtocolVersionUnsupported, Result, ServerHello,
+    Packet, ProtocolVersionUnsupported, Result, RpcExecute, RpcResponse, ServerHello,
 };
 use bytes::{Buf, BytesMut};
 use std::io;
@@ -20,6 +20,8 @@ pub enum ReceivedPacket {
     EntryFlagsUpdate(EntryFlagsUpdate),
     EntryDelete(EntryDelete),
     ClearAllEntries(ClearAllEntries),
+    RpcExecute(RpcExecute),
+    RpcResponse(RpcResponse),
 }
 
 pub struct NTCodec;
@@ -112,6 +114,16 @@ fn try_decode(mut buf: &mut dyn Buf) -> Result<(ReceivedPacket, usize)> {
             let (packet, read) = ClearAllEntries::deserialize(buf)?;
             bytes += read;
             Some(ReceivedPacket::ClearAllEntries(packet))
+        }
+        0x20 => {
+            let (packet, read) = RpcExecute::deserialize(buf)?;
+            bytes += read;
+            Some(ReceivedPacket::RpcExecute(packet))
+        }
+        0x21 => {
+            let (packet, read) = RpcResponse::deserialize(buf)?;
+            bytes += read;
+            Some(ReceivedPacket::RpcResponse(packet))
         }
         _ => None,
     };

@@ -7,10 +7,12 @@ use futures_util::stream::Stream;
 use futures_util::{StreamExt, TryStreamExt};
 use nt_network::codec::NTCodec;
 use nt_network::{
-    EntryAssignment, NTVersion, Packet, ProtocolVersionUnsupported, ReceivedPacket, ServerHello,
-    ServerHelloComplete,
+    EntryAssignment, NTVersion, Packet, ProtocolVersionUnsupported, ReceivedPacket, RpcResponse,
+    ServerHello, ServerHelloComplete,
 };
+use std::borrow::Cow;
 use std::net::SocketAddr;
+use std::panic;
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::Decoder;
@@ -90,12 +92,9 @@ async fn handle_ws_conn(
 
     let mut conn = tokio_tungstenite::accept_hdr_async(conn, |req: &Request, mut res: Response| {
         let proto = req
-            .headers()
-            .iter()
-            .find(|(name, _)| name.as_str().eq_ignore_ascii_case("Sec-WebSocket-Protocol"))
-            .map(|(_, value)| value.as_bytes())
-            .unwrap_or("".as_bytes());
-
+            .headers
+            .find_first("Sec-WebSocket-Protocol")
+            .unwrap_or(b""); // Get protocol from headers
         let proto = std::str::from_utf8(proto).unwrap();
         if proto.to_lowercase().contains("networktables") {
             res.headers_mut().insert("Sec-WebSocket-Protocol", HeaderValue::from_str(proto).unwrap());
@@ -263,6 +262,40 @@ where
                             .map(|(_, tx)| tx)
                         {
                             tx.unbounded_send(Box::new(cea)).unwrap();
+                        }
+                    }
+                }
+                ReceivedPacket::RpcExecute(rpc) => {
+                    let state = state.lock().unwrap();
+                    let client = state.clients.get(&addr).unwrap().clone();
+
+                    match state.rpc_actions.get(&rpc.entry_id) {
+                        Some(func) => {
+                            let func = func.clone();
+                            tokio::spawn(async move {
+                                let result =
+                                    match panic::catch_unwind(|| func(rpc.parameter.clone())) {
+                                        Ok(res) => res,
+                                        Err(_) => Vec::new(),
+                                    };
+
+                                client
+                                    .unbounded_send(Box::new(RpcResponse::new(
+                                        rpc.entry_id,
+                                        rpc.unique_id,
+                                        result,
+                                    )))
+                                    .unwrap();
+                            });
+                        }
+                        None => {
+                            client
+                                .unbounded_send(Box::new(RpcResponse::new(
+                                    rpc.entry_id,
+                                    rpc.unique_id,
+                                    Vec::new(),
+                                )))
+                                .unwrap();
                         }
                     }
                 }
