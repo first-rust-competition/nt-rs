@@ -82,23 +82,25 @@ pub async fn connection(
         .unwrap();
     while let Some(msg) = rx.next().await {
         match msg {
-            Either::Left(packet) => match tx.send(packet).await {
-                Ok(_) => {}
-                Err(e) => {
-                    if let Ok(e) = e.downcast::<std::io::Error>() {
-                        if e.kind() == std::io::ErrorKind::BrokenPipe {
-                            // connection terminated
-                            let mut state = tx_state.lock().unwrap();
-                            state
-                                .connection_callbacks
-                                .iter_all_mut()
-                                .filter(|(cb, _)| {
-                                    **cb == ConnectionCallbackType::ClientDisconnected
-                                })
-                                .flat_map(|(_, cbs)| cbs)
-                                .for_each(|cb| cb(&addr));
-                            state.connected = false;
-                            return Ok(());
+            Either::Left(packet) => {
+                match tx.send(packet).await {
+                    Ok(_) => {}
+                    Err(e) => {
+                        if let Ok(e) = e.downcast::<std::io::Error>() {
+                            if e.kind() == std::io::ErrorKind::BrokenPipe {
+                                // connection terminated
+                                let mut state = tx_state.lock().unwrap();
+                                state
+                                    .connection_callbacks
+                                    .iter_all_mut()
+                                    .filter(|(cb, _)| {
+                                        **cb == ConnectionCallbackType::ClientDisconnected
+                                    })
+                                    .flat_map(|(_, cbs)| cbs)
+                                    .for_each(|cb| cb(&addr));
+                                state.connected = false;
+                                return Ok(());
+                            }
                         }
                     }
                 }

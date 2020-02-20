@@ -157,10 +157,11 @@ impl State for ClientState {
     fn update_entry(&mut self, id: u16, new_value: EntryValue) {
         if let Some(entry) = self.entries.get_mut(&id) {
             entry.value = new_value.clone();
+            entry.seqnum += 1;
             self.packet_tx
                 .unbounded_send(Box::new(EntryUpdate::new(
                     id,
-                    entry.seqnum + 1,
+                    entry.seqnum,
                     entry.entry_type(),
                     new_value,
                 )))
