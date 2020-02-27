@@ -18,5 +18,5 @@ pub type Result<T> = std::result::Result<T, error::Error>;
 pub use self::nt::callback::*;
 pub use self::nt::entry::EntryData;
 pub use self::nt::NetworkTables;
-//pub use self::proto::{NTBackend, State, Server, Client};
+pub use self::proto::{NTBackend, State, Server, Client};
 pub use nt_network::types::*;
