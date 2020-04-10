@@ -3,6 +3,7 @@ use crate::{
     ClearAllEntries, ClientHello, EntryAssignment, EntryDelete, EntryFlagsUpdate, EntryUpdate,
     Packet, ProtocolVersionUnsupported, Result, RpcExecute, RpcResponse, ServerHello,
 };
+use anyhow::anyhow;
 use bytes::{Buf, BytesMut};
 use std::io;
 use tokio_util::codec::{Decoder, Encoder};
@@ -28,7 +29,7 @@ pub struct NTCodec;
 
 impl Encoder for NTCodec {
     type Item = Box<dyn Packet>;
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<()> {
         dst.put_serializable(&*item);
@@ -38,7 +39,7 @@ impl Encoder for NTCodec {
 
 impl Decoder for NTCodec {
     type Item = ReceivedPacket;
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<ReceivedPacket>> {
         let mut buf = src.clone().freeze();
@@ -49,15 +50,11 @@ impl Decoder for NTCodec {
 
         let (packet, bytes) = match try_decode(&mut buf) {
             Ok(t) => t,
-            Err(e) => match e.find_root_cause().downcast_ref::<io::Error>() {
-                Some(err) => {
-                    if err.kind() == io::ErrorKind::UnexpectedEof {
-                        return Ok(None);
-                    } else {
-                        return Err(e);
-                    }
+            Err(e) => match e.downcast_ref::<io::Error>() {
+                Some(err) if err.kind() == io::ErrorKind::UnexpectedEof => {
+                    return Ok(None);
                 }
-                None => return Err(e),
+                _ => return Err(e),
             },
         };
 
@@ -130,6 +127,6 @@ fn try_decode(mut buf: &mut dyn Buf) -> Result<(ReceivedPacket, usize)> {
 
     match packet {
         Some(packet) => Ok((packet, bytes)),
-        None => failure::bail!("Failed to decode packet"),
+        None => Err(anyhow!("Failed to decode packet")),
     }
 }

@@ -1,9 +1,7 @@
-use nt::{CallbackType, EntryData, EntryValue, NetworkTables};
-
-type Result<T> = std::result::Result<T, failure::Error>;
+use nt::{CallbackType, NetworkTables};
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let mut client = NetworkTables::connect("127.0.0.1:1735", "nt-rs").await?;
 
     client.add_callback(CallbackType::Add, |new_entry| {

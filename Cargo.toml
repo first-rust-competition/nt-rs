@@ -1,6 +1,6 @@
 [package]
 name = "nt"
-version = "2.1.1"
+version = "3.0.0"
 authors = ["Redrield <redrield@gmail.com>"]
 description = "A NetworkTables revision 3 library for Rust"
 license = "MIT"
@@ -10,8 +10,7 @@ edition = "2018"
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
 bytes = "0.5.3"
-failure = "0.1.5"
-nt-network = "2.1.0"
+nt-network = { version = "3.0.0", path = "nt-network" }
 multimap = "0.5.0"
 nt-leb128 = "0.3.0"
 futures-channel = "0.3"
@@ -19,6 +18,8 @@ futures-util = { version = "0.3", features = ["sink"] }
 tokio-util = { version = "0.2", features = ["codec"] }
 url = { version = "2.1.0", optional = true }
 tokio-tungstenite = { version = "0.10.0", optional = true, features = ["stream"] }
+thiserror = "1.0"
+anyhow = "1.0"
 
 [features]
 default = []

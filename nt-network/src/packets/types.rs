@@ -2,7 +2,8 @@ use crate::ext::BufExt;
 use crate::packets::Packet;
 use crate::Result;
 use bytes::{Buf, BufMut, BytesMut};
-use failure::{bail, Fail};
+use anyhow::anyhow;
+use thiserror::Error;
 use nt_leb128::*;
 #[cfg(feature = "wasm-bindgen")]
 use wasm_bindgen::prelude::*;
@@ -109,9 +110,9 @@ pub enum RpcDefinition {
     V0,
 }
 
-#[derive(Debug, Fail)]
+#[derive(Debug, Error)]
 pub enum RpcError {
-    #[fail(display = "Invalid Rpc Definition: {}", version)]
+    #[error("Invalid RPC Definition: {version}")]
     InvalidVersion { version: u8 },
 }
 
@@ -209,7 +210,7 @@ impl Packet for EntryType {
             0x11 => EntryType::DoubleArray,
             0x12 => EntryType::StringArray,
             0x20 => EntryType::RpcDefinition,
-            _ => bail!("Invalid entry type"),
+            _ => return Err(anyhow!("Invalid entry type")),
         };
 
         Ok((entry, 1))

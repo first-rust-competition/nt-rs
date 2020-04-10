@@ -2,9 +2,9 @@ pub mod codec;
 mod ext;
 mod packets;
 
-use failure::bail;
+use anyhow::anyhow;
 
-pub type Result<T> = std::result::Result<T, failure::Error>;
+pub type Result<T> = std::result::Result<T, anyhow::Error>;
 
 pub use self::codec::ReceivedPacket;
 pub use self::packets::*;
@@ -21,7 +21,7 @@ impl NTVersion {
         match v {
             0x0200 => Ok(NTVersion::V2),
             0x0300 => Ok(NTVersion::V3),
-            _ => bail!("Invalid version passed in packet. {:#x}", v),
+            _ => Err(anyhow!("Invalid version passed in packet. {:#x}", v)),
         }
     }
 }

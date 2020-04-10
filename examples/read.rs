@@ -1,12 +1,7 @@
-extern crate failure;
-extern crate nt;
-
-type Result<T> = std::result::Result<T, failure::Error>;
-
 use nt::{ConnectionCallbackType, NetworkTables};
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let client = NetworkTables::connect("127.0.0.1:1735", "cool client").await?;
 
     client.add_connection_callback(ConnectionCallbackType::ClientDisconnected, |_| {

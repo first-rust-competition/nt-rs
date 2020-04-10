@@ -1,9 +1,7 @@
 use nt::{EntryData, EntryValue, NetworkTables};
 
-type Result<T> = std::result::Result<T, failure::Error>;
-
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     let client = NetworkTables::connect("127.0.0.1:1735", "nt-rs").await?;
 
     client.create_entry(EntryData::new(
