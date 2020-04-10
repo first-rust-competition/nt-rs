@@ -12,18 +12,14 @@ pub enum Error {
         supported_version: NTVersion,
     },
     #[error(transparent)]
-    IO {
-        #[from] cause: std::io::Error,
-    },
+    IO(#[from] std::io::Error),
     #[error(transparent)]
-    Other {
-        #[from] cause: anyhow::Error,
-    }
+    Other(#[from] anyhow::Error),
 }
 
 #[cfg(feature = "websocket")]
 impl From<tokio_tungstenite::tungstenite::error::Error> for Error {
     fn from(err: tokio_tungstenite::tungstenite::error::Error) -> Self {
-        Error::Other { cause: err.into() }
+        Error::Other(err.into())
     }
 }
