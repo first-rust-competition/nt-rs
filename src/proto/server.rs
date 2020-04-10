@@ -67,7 +67,12 @@ impl ServerState {
         data: EntryData,
         callback: impl Fn(Vec<u8>) -> Vec<u8> + Send + Sync + RefUnwindSafe + 'static,
     ) {
-        let id = self.create_entry(data).unwrap().try_next().unwrap().unwrap();
+        let id = self
+            .create_entry(data)
+            .unwrap()
+            .try_next()
+            .unwrap()
+            .unwrap();
         self.rpc_actions.insert(id, Arc::new(callback));
     }
 }

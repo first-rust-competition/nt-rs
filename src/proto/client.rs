@@ -1,4 +1,5 @@
 use super::State;
+use crate::error::Error;
 use crate::{
     Action, CallbackType, ConnectionAction, ConnectionCallbackType, EntryData, EntryValue,
     RpcCallback,
@@ -15,7 +16,6 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use tokio::runtime::Runtime;
-use crate::error::Error;
 
 pub(crate) mod conn;
 
@@ -132,7 +132,7 @@ impl State for ClientState {
 
     fn create_entry(&mut self, data: EntryData) -> crate::Result<Receiver<u16>> {
         if !self.connected {
-            return Err(Error::BrokenPipe)
+            return Err(Error::BrokenPipe);
         }
         let (tx, rx) = channel::<u16>(1);
         self.pending_entries.insert(data.name.clone(), tx);

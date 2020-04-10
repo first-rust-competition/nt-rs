@@ -8,9 +8,9 @@
 
 extern crate tokio;
 
+pub mod error;
 mod nt;
 mod proto;
-pub mod error;
 
 /// Base result type for nt-rs
 pub type Result<T> = std::result::Result<T, error::Error>;
@@ -18,5 +18,5 @@ pub type Result<T> = std::result::Result<T, error::Error>;
 pub use self::nt::callback::*;
 pub use self::nt::entry::EntryData;
 pub use self::nt::NetworkTables;
-pub use self::proto::{NTBackend, State, Server, Client};
+pub use self::proto::{Client, NTBackend, Server, State};
 pub use nt_network::types::*;

@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::proto::server::ServerState;
 use crate::proto::State;
 use crate::{CallbackType, ConnectionCallbackType, EntryData};
@@ -15,7 +16,6 @@ use std::panic;
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_util::codec::Decoder;
-use crate::error::Error;
 
 pub async fn connection(
     ip: String,
@@ -45,7 +45,12 @@ pub async fn connection(
 
                 let (tx, rx) = unbounded::<Box<dyn Packet>>();
                 state.lock().unwrap().clients.insert(addr, tx);
-                tokio::spawn(client_conn(addr, NTCodec.framed(conn).map_err(Error::from), rx, state.clone()));
+                tokio::spawn(client_conn(
+                    addr,
+                    NTCodec.framed(conn).map_err(Error::from),
+                    rx,
+                    state.clone(),
+                ));
             }
         }
     }
@@ -94,9 +99,14 @@ async fn handle_ws_conn(
         let proto = req
             .headers()
             .get("Sec-WebSocket-Protocol")
-            .unwrap_or(&default).to_str().unwrap(); // Get protocol from headers
+            .unwrap_or(&default)
+            .to_str()
+            .unwrap(); // Get protocol from headers
         if proto.to_lowercase().contains("networktables") {
-            res.headers_mut().insert("Sec-WebSocket-Protocol", HeaderValue::from_str(proto).unwrap());
+            res.headers_mut().insert(
+                "Sec-WebSocket-Protocol",
+                HeaderValue::from_str(proto).unwrap(),
+            );
         } else {
             client_valid = false;
         }
@@ -119,7 +129,12 @@ async fn handle_ws_conn(
 
     let (tx, rx) = unbounded::<Box<dyn Packet>>();
     state.lock().unwrap().clients.insert(addr, tx);
-    tokio::spawn(client_conn(addr, codec.map_err(Error::from), rx, state.clone()));
+    tokio::spawn(client_conn(
+        addr,
+        codec.map_err(Error::from),
+        rx,
+        state.clone(),
+    ));
     Ok(())
 }
 

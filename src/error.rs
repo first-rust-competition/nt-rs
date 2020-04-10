@@ -8,9 +8,7 @@ pub enum Error {
     #[error("Connected closed unexpectedly.")]
     BrokenPipe,
     #[error("Server does not support the desired protocol version. Supported version: {supported_version:?}")]
-    UnsupportedProtocolVersion {
-        supported_version: NTVersion,
-    },
+    UnsupportedProtocolVersion { supported_version: NTVersion },
     #[error(transparent)]
     IO(#[from] std::io::Error),
     #[error(transparent)]

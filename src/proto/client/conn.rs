@@ -1,3 +1,4 @@
+use crate::error::Error;
 use crate::proto::client::ClientState;
 #[cfg(feature = "websocket")]
 use crate::proto::ws::WSCodec;
@@ -18,7 +19,6 @@ use tokio_tungstenite::tungstenite::handshake::client::Request;
 use tokio_util::codec::Decoder;
 #[cfg(feature = "websocket")]
 use url::Url;
-use crate::error::Error;
 
 pub async fn connection(
     state: Arc<Mutex<ClientState>>,
@@ -104,7 +104,7 @@ pub async fn connection(
                         }
                     }
                 }
-            },
+            }
             Either::Right(_) => return Ok(()),
         }
     }
@@ -132,7 +132,12 @@ pub async fn connection_ws(
     let addr = format!("{}:{}", domain, port).parse().unwrap();
 
     let req = Request::get(url)
-        .header("Sec-WebSocket-Protocol", HeaderValue::from_str("NetworkTables").unwrap()).body(()).unwrap();
+        .header(
+            "Sec-WebSocket-Protocol",
+            HeaderValue::from_str("NetworkTables").unwrap(),
+        )
+        .body(())
+        .unwrap();
     let (sock, _resp) = tokio_tungstenite::connect_async(req).await?;
     println!("Connected to remote.");
 
@@ -216,7 +221,9 @@ fn handle_packet(packet: ReceivedPacket, state: &Arc<Mutex<ClientState>>) -> cra
         ReceivedPacket::KeepAlive => {}
         ReceivedPacket::ClientHello(_) => {}
         ReceivedPacket::ProtocolVersionUnsupported(pvu) => {
-            return Err(Error::UnsupportedProtocolVersion { supported_version: NTVersion::from_u16(pvu.supported_version).unwrap() });
+            return Err(Error::UnsupportedProtocolVersion {
+                supported_version: NTVersion::from_u16(pvu.supported_version).unwrap(),
+            });
         }
         ReceivedPacket::ServerHello(_) => {}
         ReceivedPacket::ClientHelloComplete => {}
