@@ -1,6 +1,6 @@
 [package]
 name = "nt-network"
-version = "2.1.0"
+version = "3.0.0"
 authors = ["Redrield <redrield@gmail.com>"]
 description = "Networking types and codecs for nt-rs"
 repository = "https://gitlab.com/Redrield/nt-rs"
@@ -9,10 +9,11 @@ edition = "2018"
 
 [dependencies]
 bytes = "0.5.2"
-failure = "0.1.5"
 futures = "0.1.27"
 tokio-util = { version = "0.2.0", features = ["codec"] }
 wasm-bindgen = { version = "0.2.45", optional = true }
 nt-leb128 = "0.3.1"
+anyhow = "1.0"
+thiserror = "1.0"
 
 

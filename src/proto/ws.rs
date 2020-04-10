@@ -1,5 +1,6 @@
+use std::pin::Pin;
+
 use bytes::BytesMut;
-use failure::_core::pin::Pin;
 use futures_util::sink::Sink;
 use futures_util::stream::Stream;
 use futures_util::task::{Context, Poll};
@@ -55,7 +56,7 @@ impl Stream for WSCodec {
 }
 
 impl Sink<Box<dyn Packet>> for WSCodec {
-    type Error = failure::Error;
+    type Error = anyhow::Error;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Sink::poll_ready(Pin::new(&mut self.sock), cx).map_err(Into::into)
