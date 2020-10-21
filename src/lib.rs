@@ -8,6 +8,7 @@
 
 extern crate tokio;
 
+mod backend;
 pub mod error;
 mod nt;
 mod proto;
@@ -15,8 +16,17 @@ mod proto;
 /// Base result type for nt-rs
 pub type Result<T> = std::result::Result<T, error::Error>;
 
-pub use self::nt::callback::*;
-pub use self::nt::entry::EntryData;
+// pub use self::nt::callback::*;
+// pub use self::nt::entry::EntryData;
+pub use self::backend::{NTBackend, Server, State};
 pub use self::nt::NetworkTables;
-pub use self::proto::{Client, NTBackend, Server, State};
-pub use nt_network::types::*;
+
+/// An NT4 time source using system time
+/// This is a time source that will work on any machine that wishes to host an NT server,
+/// however there are cases when a different time source would be preferred (e.g. FPGA on the roboRIO)
+#[cfg(feature = "chrono")]
+pub fn system_time() -> u64 {
+    use chrono::Local;
+    let now = Local::now();
+    now.timestamp_nanos() as u64 / 1000
+}

@@ -1,4 +1,4 @@
-use crate::EntryData;
+use crate::nt::Topic;
 use std::net::SocketAddr;
 use std::panic::RefUnwindSafe;
 
@@ -17,7 +17,7 @@ pub enum ConnectionCallbackType {
 
 pub type ConnectionAction = dyn FnMut(&SocketAddr) + Send + 'static;
 
-pub type Action = dyn FnMut(&EntryData) + Send + 'static;
+pub type Action = dyn FnMut(&Topic) + Send + 'static;
 
 pub type RpcAction = dyn Fn(Vec<u8>) -> Vec<u8> + Send + Sync + RefUnwindSafe + 'static;
 

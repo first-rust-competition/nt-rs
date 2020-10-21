@@ -1,45 +1,39 @@
-use crate::nt::{callback::CallbackType, EntryData};
-use futures_channel::mpsc::Receiver;
-use nt_network::types::EntryValue;
-use std::collections::HashMap;
+//! # The protocol for NetworkTables v4 (NT over WebSockets)
+//!
+//! This module contains Rust representations of the messages described in the NTv4 specification.
+//! These types are serialized with the relevant `serde` crates, and can be used to create a client or server compliant with the specification
+//!
+//! This crate does not prescribe a runtime that must be used, text messages are decoded as normal using serde_json,
+//! and binary messages can be decoded from a normal byte slice. Implementation details of the runtime used are left to consumers of the crate.
 
-pub mod client;
-pub mod server;
-#[cfg(feature = "websocket")]
-pub mod ws;
+mod bin;
+mod text;
 
-pub trait NTBackend {
-    type State: State;
-}
+pub mod codec;
+mod ext;
 
-pub struct Client;
-impl NTBackend for Client {
-    type State = client::ClientState;
-}
+pub mod prelude {
+    pub use crate::proto::bin::*;
+    pub use crate::proto::text::*;
 
-pub struct Server;
-impl NTBackend for Server {
-    type State = server::ServerState;
-}
+    /// An enum wrapping the possible frames that can be received in NT4 communications
+    #[derive(Debug)]
+    pub enum NTMessage {
+        /// A JSON-encoded message framed as WS TEXT
+        Text(Vec<NTTextMessage>),
+        /// A Msgpack-encoded data stream framed as WS BIN
+        Binary(Vec<NTBinaryMessage>),
+        /// A WS CLOSE frame
+        Close,
+    }
 
-pub trait State {
-    fn entries(&self) -> &HashMap<u16, EntryData>;
+    impl NTMessage {
+        pub fn single_text(msg: NTTextMessage) -> NTMessage {
+            NTMessage::Text(vec![msg])
+        }
 
-    fn entries_mut(&mut self) -> &mut HashMap<u16, EntryData>;
-
-    fn create_entry(&mut self, data: EntryData) -> crate::Result<Receiver<u16>>;
-
-    fn delete_entry(&mut self, id: u16);
-
-    fn update_entry(&mut self, id: u16, new_value: EntryValue);
-
-    fn update_entry_flags(&mut self, id: u16, flags: u8);
-
-    fn clear_entries(&mut self);
-
-    fn add_callback(
-        &mut self,
-        callback_type: CallbackType,
-        action: impl FnMut(&EntryData) + Send + 'static,
-    );
+        pub fn single_bin(msg: NTBinaryMessage) -> NTMessage {
+            NTMessage::Binary(vec![msg])
+        }
+    }
 }

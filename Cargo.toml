@@ -10,18 +10,18 @@ edition = "2018"
 [dependencies]
 tokio = { version = "0.2", features = ["full"] }
 bytes = "0.5"
-nt-network = { version = "3.0.0", path = "nt-network" }
 multimap = "0.5"
-nt-leb128 = "0.3"
-futures-channel = "0.3"
-futures-util = { version = "0.3", features = ["sink"] }
-tokio-util = { version = "0.2", features = ["codec"] }
-url = { version = "2.1", optional = true }
-tokio-tungstenite = { version = "0.10", optional = true, features = ["stream"] }
+url = { version = "2.1" }
+tokio-tungstenite = { version = "0.11", features = ["stream"] }
 thiserror = "1.0"
-anyhow = "1.0"
-
-[features]
-default = []
-websocket = ["tokio-tungstenite", "url"]
-
+anyhow = "1.0.33"
+serde = { version = "1.0.117", features = ["derive"] }
+serde_json = "1.0.59"
+rmp-serde = "0.14.4"
+rmpv = "0.4.5"
+futures = "0.3.6"
+async-trait = "0.1.41"
+chrono = { version = "0.4.19", optional = true }
+log = "0.4.11"
+itertools = "0.9.0"
+rand = "0.7.3"
