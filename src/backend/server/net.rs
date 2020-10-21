@@ -7,32 +7,51 @@ use std::ops::DerefMut;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::sync::mpsc::Sender;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, watch};
 use tokio_tungstenite::stream::Stream;
 use tokio_tungstenite::tungstenite::handshake::server::{Request, Response};
 use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode};
 use tokio_tungstenite::{tungstenite, WebSocketStream};
+use futures::future::{select, Either};
+use tokio::stream::StreamExt;
 
 pub async fn tcp_loop(
     state: Arc<Mutex<NTServer>>,
     tx: Sender<ServerMessage>,
     addr: impl ToSocketAddrs,
+    mut close_rx: watch::Receiver<u8>,
 ) -> anyhow::Result<()> {
     let mut srv = TcpListener::bind(addr).await?;
+    log::info!("Server bound at {}", srv.local_addr().unwrap());
 
-    while let Ok((sock, addr)) = srv.accept().await {
-        log::info!("Unsecure TCP connection at {}", addr);
-        let cid = rand::random::<u32>();
-        let sock = try_accept(sock).await;
+    loop {
+        tokio::select! {
+            Ok((sock, addr)) = srv.accept() => {
+                log::info!("Unsecure TCP connection at {}", addr);
+                let cid = rand::random::<u32>();
+                let sock = try_accept(sock).await;
 
-        if let Ok(sock) = sock {
-            log::info!("Client assigned ID {}", cid);
-            let client = ConnectedClient::new(NTSocket::new(sock), tx.clone(), cid, state.clone());
-            state.lock().await.clients.insert(cid, client);
-            tokio::spawn(update_new_client(cid, state.clone()));
+                if let Ok(sock) = sock {
+                    log::info!("Client assigned ID {}", cid);
+                    let client = ConnectedClient::new(NTSocket::new(sock), tx.clone(), cid, &state);
+                    state.lock().await.clients.insert(cid, client);
+                    tokio::spawn(update_new_client(cid, state.clone()));
+                }
+            }
+            close = close_rx.recv() => {
+                if close == Some(1) {
+                    log::info!("TCP accept task shutting down...");
+                    break;
+                }
+            }
         }
     }
 
+    let mut state = state.lock().await;
+    for client in state.clients.values_mut() {
+        client.send_message(NTMessage::Close).await;
+    }
+    log::info!("All clients notified. TCP task shut down.");
     Ok(())
 }
 

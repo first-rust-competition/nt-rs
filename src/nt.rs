@@ -10,13 +10,14 @@ use crate::nt::topic::{Topic, TopicFlags};
 use crate::proto::prelude::NTValue;
 use std::collections::HashMap;
 use std::net::SocketAddr;
-use std::sync::{Arc, Mutex};
-use tokio::sync::oneshot;
+use std::sync::Arc;
+use tokio::sync::{watch, Mutex};
+use tokio::net::ToSocketAddrs;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables<T: NTBackend> {
     state: Arc<Mutex<T::State>>,
-    close_tx: oneshot::Sender<()>,
+    close_tx: watch::Sender<u8>,
 }
 
 //impl NetworkTables<Client> {
@@ -97,13 +98,12 @@ impl NetworkTables<Server> {
     ///
     /// [`system_time`]: ../fn.system_time.html
     pub async fn bind(
-        ip: &str,
-        time_source: impl Fn() -> u64 + Send + Sync,
+        ip: impl ToSocketAddrs + Send + Sync + 'static,
+        time_source: impl Fn() -> u64 + Send + Sync + 'static,
     ) -> NetworkTables<Server> {
-        let (close_tx, close_rx) = oneshot::channel::<()>();
-        todo!()
-        // let state = ServerState::new(ip.to_string(), server_name.to_string(), close_rx);
-        // NetworkTables { state, close_tx }
+        let (close_tx, close_rx) = watch::channel::<u8>(0);
+        let state = NTServer::new(ip, time_source, close_rx).await;
+        NetworkTables { state, close_tx }
     }
 
     /// Adds a callback for connection state updates regarding clients.
@@ -125,8 +125,8 @@ impl NetworkTables<Server> {
 
 impl<T: NTBackend> NetworkTables<T> {
     /// Returns a copy of the entries recognizes by the connection
-    pub fn topics(&self) -> HashMap<String, Topic> {
-        self.state.lock().unwrap().topics().clone()
+    pub async fn topics(&self) -> HashMap<String, Topic> {
+        self.state.lock().await.topics().clone()
     }
 
     /// Begin publishing the given topic.
@@ -134,7 +134,7 @@ impl<T: NTBackend> NetworkTables<T> {
     /// Once this function returns, values can be published to the topic specified,
     /// using its name as a key.
     pub async fn publish(&self, topic: Topic) {
-        self.state.lock().unwrap().publish(topic).await;
+        self.state.lock().await.publish(topic).await;
     }
 
     /// Releases the given topic, if it was being published by this NT instance.
@@ -142,12 +142,12 @@ impl<T: NTBackend> NetworkTables<T> {
     /// This does not necessarily delete the value associated with the topic.
     /// Topic values are deleted when the last client publishing to a non-persistent topic releases it.
     pub async fn release(&self, name: &str) {
-        self.state.lock().unwrap().release(name).await;
+        self.state.lock().await.release(name).await;
     }
 
     /// Updates the topic with the given name, with the new value
-    pub fn update_topic(&self, name: &str, value: NTValue) {
-        self.state.lock().unwrap().update_topic(name, value);
+    pub async fn update_topic(&self, name: &str, value: NTValue) {
+        self.state.lock().await.update_topic(name, value).await;
     }
 
     /// Adds an entry callback of the given type.
@@ -163,16 +163,17 @@ impl<T: NTBackend> NetworkTables<T> {
     // }
 
     /// Updates the flags associated with the topic of the given name
-    pub fn update_topic_flags(&self, name: &str, new_flags: TopicFlags) {
+    pub async fn update_topic_flags(&self, name: &str, new_flags: TopicFlags) {
         self.state
             .lock()
-            .unwrap()
-            .update_topic_flags(name, new_flags);
+            .await
+            .update_topic_flags(name, new_flags).await;
     }
 }
 
 impl<T: NTBackend> Drop for NetworkTables<T> {
     fn drop(&mut self) {
-        // let _ = self.close_tx.send(());
+        log::info!("Dropping user struct");
+        let _ = self.close_tx.broadcast(1);
     }
 }

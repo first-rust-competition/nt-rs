@@ -5,13 +5,15 @@ use crate::proto::prelude::{
 use crate::State;
 use async_trait::async_trait;
 use std::collections::HashMap;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, watch, Mutex};
 
 mod client;
 use crate::nt::callback::CallbackType;
 use client::ConnectedClient;
-use std::net::ToSocketAddrs;
 use std::sync::Arc;
+use crate::backend::server::net::tcp_loop;
+use tokio::net::ToSocketAddrs;
+use crate::backend::server::loops::{channel_loop, broadcast_loop};
 
 mod loops;
 mod net;
@@ -31,10 +33,11 @@ pub struct NTServer {
 }
 
 impl NTServer {
-    pub async fn new<A: ToSocketAddrs>(
+    pub async fn new<A: ToSocketAddrs + Send + Sync + 'static>(
         ip: A,
         time_source: impl Fn() -> u64 + Send + Sync + 'static,
-    ) {
+        close_rx: watch::Receiver<u8>,
+    ) -> Arc<Mutex<NTServer>> {
         //TODO: Secure socket (requires tokio-rustls feature in tungstenite)
         let _self = Arc::new(Mutex::new(NTServer {
             topics: HashMap::new(),
@@ -44,7 +47,11 @@ impl NTServer {
             time_source: Box::new(time_source),
         }));
 
-        // let (tx, rx) = mpsc::channel(32);
+        let (tx, rx) = mpsc::channel(32);
+        tokio::spawn(tcp_loop(_self.clone(), tx, ip, close_rx));
+        tokio::spawn(channel_loop(Arc::downgrade(&_self), rx));
+        tokio::spawn(broadcast_loop(Arc::downgrade(&_self)));
+        _self
     }
 
     async fn create_topic(&mut self, name: String, _type: DataType) {
