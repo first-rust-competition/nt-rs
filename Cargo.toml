@@ -28,4 +28,6 @@ rand = "0.7.3"
 
 [dev-dependencies]
 fern = { version = "0.6.0", features = ["colored"] }
-chrono = "0.4.19"
+
+[features]
+default = ["chrono"]
