@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::ops::DerefMut;
 use std::sync::{Arc, Weak};
 use tokio::sync::{mpsc, oneshot, Mutex};
+use std::net::SocketAddr;
+use crate::nt::callback::ConnectionCallbackType;
 
 #[derive(Clone, Debug)]
 pub struct Subscription {
@@ -36,6 +38,7 @@ async fn client_loop(
     mut rx: SplitStream<NTSocket>,
     mut tx: mpsc::Sender<ServerMessage>,
     cid: u32,
+    addr: SocketAddr,
     state: Weak<Mutex<NTServer>>,
 ) -> Result<()> {
     // Simple loop over the incoming packet stream. If the state pointer ever fails to upgrade, then the NetworkTables
@@ -226,6 +229,16 @@ async fn client_loop(
     log::info!("Client loop for CID {} terminated", cid);
     tx.send(ServerMessage::ClientDisconnected(cid)).await;
 
+    // Notify callbacks if they still exist
+    if let Some(state) = state.upgrade() {
+        let mut state = state.lock().await;
+        state.connection_callbacks.iter_all_mut()
+            .filter(|(ty, _)| **ty == ConnectionCallbackType::ClientDisconnected)
+            .flat_map(|(_, fns)| fns)
+            .for_each(|cb| cb(&addr, false))
+    }
+
+
     Ok(())
 }
 
@@ -235,10 +248,11 @@ impl ConnectedClient {
         server_tx: mpsc::Sender<ServerMessage>,
         cid: u32,
         state: &Arc<Mutex<NTServer>>,
+        addr: SocketAddr,
     ) -> ConnectedClient {
         let (net_tx, net_rx) = sock.split();
 
-        tokio::spawn(client_loop(net_rx, server_tx, cid, Arc::downgrade(state)));
+        tokio::spawn(client_loop(net_rx, server_tx, cid, addr, Arc::downgrade(state)));
 
         ConnectedClient {
             net_tx,

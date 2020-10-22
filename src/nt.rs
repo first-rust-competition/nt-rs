@@ -173,7 +173,6 @@ impl<T: NTBackend> NetworkTables<T> {
 
 impl<T: NTBackend> Drop for NetworkTables<T> {
     fn drop(&mut self) {
-        log::info!("Dropping user struct");
         let _ = self.close_tx.broadcast(1);
     }
 }

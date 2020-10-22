@@ -15,10 +15,7 @@ pub enum ConnectionCallbackType {
     ClientDisconnected,
 }
 
-pub type ConnectionAction = dyn FnMut(&SocketAddr) + Send + 'static;
+pub type ConnectionCallback = dyn FnMut(&SocketAddr, bool) + Send + Sync + 'static;
 
 pub type Action = dyn FnMut(&Topic) + Send + 'static;
 
-pub type RpcAction = dyn Fn(Vec<u8>) -> Vec<u8> + Send + Sync + RefUnwindSafe + 'static;
-
-pub type RpcCallback = dyn Fn(Vec<u8>) + Send + 'static;

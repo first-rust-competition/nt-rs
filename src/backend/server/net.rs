@@ -14,6 +14,7 @@ use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode};
 use tokio_tungstenite::{tungstenite, WebSocketStream};
 use futures::future::{select, Either};
 use tokio::stream::StreamExt;
+use crate::nt::callback::ConnectionCallbackType;
 
 pub async fn tcp_loop(
     state: Arc<Mutex<NTServer>>,
@@ -28,12 +29,21 @@ pub async fn tcp_loop(
         tokio::select! {
             Ok((sock, addr)) = srv.accept() => {
                 log::info!("Unsecure TCP connection at {}", addr);
+
+                {
+                    let mut state = state.lock().await;
+                    state.connection_callbacks.iter_all_mut()
+                    .filter(|(ty, _)| **ty == ConnectionCallbackType::ClientConnected)
+                    .flat_map(|(_, fns)| fns)
+                    .for_each(|cb| cb(&addr, false));
+                }
+
                 let cid = rand::random::<u32>();
                 let sock = try_accept(sock).await;
 
                 if let Ok(sock) = sock {
                     log::info!("Client assigned ID {}", cid);
-                    let client = ConnectedClient::new(NTSocket::new(sock), tx.clone(), cid, &state);
+                    let client = ConnectedClient::new(NTSocket::new(sock), tx.clone(), cid, &state, addr);
                     state.lock().await.clients.insert(cid, client);
                     tokio::spawn(update_new_client(cid, state.clone()));
                 }

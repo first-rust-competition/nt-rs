@@ -8,12 +8,14 @@ use std::collections::HashMap;
 use tokio::sync::{mpsc, watch, Mutex};
 
 mod client;
-use crate::nt::callback::CallbackType;
+use crate::nt::callback::{CallbackType, ConnectionCallbackType, ConnectionCallback};
 use client::ConnectedClient;
 use std::sync::Arc;
 use crate::backend::server::net::tcp_loop;
 use tokio::net::ToSocketAddrs;
 use crate::backend::server::loops::{channel_loop, broadcast_loop};
+use multimap::MultiMap;
+use std::net::SocketAddr;
 
 mod loops;
 mod net;
@@ -27,6 +29,7 @@ pub enum ServerMessage {
 pub struct NTServer {
     topics: HashMap<String, Topic>,
     clients: HashMap<u32, ConnectedClient>,
+    connection_callbacks: MultiMap<ConnectionCallbackType, Box<ConnectionCallback>>,
     pub_count: HashMap<String, usize>,
     pubs: Vec<String>,
     pub time_source: Box<dyn Fn() -> u64 + Send + Sync + 'static>,
@@ -42,6 +45,7 @@ impl NTServer {
         let _self = Arc::new(Mutex::new(NTServer {
             topics: HashMap::new(),
             clients: HashMap::new(),
+            connection_callbacks: MultiMap::new(),
             pub_count: HashMap::new(),
             pubs: Vec::new(),
             time_source: Box::new(time_source),
@@ -96,6 +100,10 @@ impl NTServer {
 
     fn now(&self) -> u64 {
         (self.time_source)()
+    }
+
+    fn add_callback(&mut self, ty: ConnectionCallbackType, cb: impl FnMut(&SocketAddr, bool) + Send + Sync + 'static) {
+        self.connection_callbacks.insert(ty, Box::new(cb));
     }
 
     fn update_value(
