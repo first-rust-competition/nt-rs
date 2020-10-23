@@ -13,6 +13,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::sync::{watch, Mutex};
 use tokio::net::ToSocketAddrs;
+use std::string::ToString;
 
 /// Core struct representing a connection to a NetworkTables server
 pub struct NetworkTables<T: NTBackend> {
@@ -150,17 +151,13 @@ impl<T: NTBackend> NetworkTables<T> {
         self.state.lock().await.update_topic(name, value).await;
     }
 
-    /// Adds an entry callback of the given type.
-    ///
-    /// Depending on what is chosen, the callback will be notified when a new entry is created,
-    /// an existing entry is updated, or an existing entry is deleted.
-    // pub fn add_callback<F>(&mut self, action: CallbackType, cb: F)
-    // where
-    //     F: FnMut(&EntryData) + Send + 'static,
-    // {
-    // let mut state = self.state.lock().unwrap();
-    // state.add_callback(action, cb);
-    // }
+    pub async fn subscribe(&self, prefix: impl ToString, callback: impl FnMut(&TopicSnapshot, CallbackType) + Send + Sync + 'static) -> u32 {
+        self.state.lock().await.subscribe(prefix.to_string(), Box::new(callback)).await
+    }
+
+    pub async fn unsubscribe(&self, subuid: u32) {
+        self.state.lock().await.unsubscribe(subuid).await;
+    }
 
     /// Updates the flags associated with the topic of the given name
     pub async fn update_topic_flags(&self, name: &str, new_flags: TopicFlags) {

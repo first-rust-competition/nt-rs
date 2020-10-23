@@ -14,7 +14,7 @@ use std::ops::DerefMut;
 use std::sync::{Arc, Weak};
 use tokio::sync::{mpsc, oneshot, Mutex};
 use std::net::SocketAddr;
-use crate::nt::callback::ConnectionCallbackType;
+use crate::nt::callback::{ConnectionCallbackType, CallbackType};
 
 #[derive(Clone, Debug)]
 pub struct Subscription {
@@ -211,6 +211,12 @@ async fn client_loop(
                                     } else {
                                         client.queued_updates.push(topic);
                                     }
+                                }
+                            }
+
+                            for topic in updates {
+                                for sub in state.subscriptions.values_mut().filter(|sub| topic.name.starts_with(&sub.prefix)) {
+                                    (sub.callback)(&topic, CallbackType::Update);
                                 }
                             }
                         }

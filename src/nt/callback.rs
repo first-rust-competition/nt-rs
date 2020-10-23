@@ -1,10 +1,10 @@
-use crate::nt::Topic;
+use crate::nt::{Topic, TopicSnapshot};
 use std::net::SocketAddr;
 use std::panic::RefUnwindSafe;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum CallbackType {
-    Add,
+    Create,
     Delete,
     Update,
 }
@@ -17,5 +17,5 @@ pub enum ConnectionCallbackType {
 
 pub type ConnectionCallback = dyn FnMut(&SocketAddr, bool) + Send + Sync + 'static;
 
-pub type Action = dyn FnMut(&Topic) + Send + 'static;
+pub type ValueCallback = dyn FnMut(&TopicSnapshot, CallbackType) + Send + Sync + 'static;
 

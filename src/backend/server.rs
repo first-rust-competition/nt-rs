@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use tokio::sync::{mpsc, watch, Mutex};
 
 mod client;
-use crate::nt::callback::{CallbackType, ConnectionCallbackType, ConnectionCallback};
+use crate::nt::callback::{CallbackType, ConnectionCallbackType, ConnectionCallback, ValueCallback};
 use client::ConnectedClient;
 use std::sync::Arc;
 use crate::backend::server::net::tcp_loop;
@@ -26,6 +26,11 @@ pub enum ServerMessage {
     ClientDisconnected(u32),
 }
 
+struct ServerSubscription {
+    prefix: String,
+    callback: Box<ValueCallback>
+}
+
 pub struct NTServer {
     topics: HashMap<String, Topic>,
     clients: HashMap<u32, ConnectedClient>,
@@ -33,6 +38,8 @@ pub struct NTServer {
     pub_count: HashMap<String, usize>,
     pubs: Vec<String>,
     pub time_source: Box<dyn Fn() -> u64 + Send + Sync + 'static>,
+    next_internal_sub_id: u32,
+    subscriptions: HashMap<u32, ServerSubscription>,
 }
 
 impl NTServer {
@@ -49,6 +56,8 @@ impl NTServer {
             pub_count: HashMap::new(),
             pubs: Vec::new(),
             time_source: Box::new(time_source),
+            next_internal_sub_id: 1,
+            subscriptions: HashMap::new()
         }));
 
         let (tx, rx) = mpsc::channel(32);
@@ -68,6 +77,10 @@ impl NTServer {
             }
         }
         let topic = Topic::new(name.clone(), _type);
+
+        for sub in self.subscriptions.values_mut().filter(|sub| topic.name.starts_with(&sub.prefix)) {
+            (sub.callback)(&topic.snapshot(), CallbackType::Create);
+        }
 
         self.broadcast_announce(&topic).await;
 
@@ -92,6 +105,10 @@ impl NTServer {
             for client in self.clients.values_mut() {
                 let msg = client.unannounce(&topic).into_message();
                 client.send_message(NTMessage::single_text(msg)).await;
+            }
+
+            for sub in self.subscriptions.values_mut().filter(|sub| topic.name.starts_with(&sub.prefix)) {
+                (sub.callback)(&topic.snapshot(), CallbackType::Delete);
             }
 
             self.pub_count.remove(name);
@@ -153,6 +170,18 @@ impl State for NTServer {
         }
     }
 
+    async fn subscribe(&mut self, prefix: String, callback: Box<ValueCallback>) -> u32 {
+        let id = self.next_internal_sub_id;
+        self.next_internal_sub_id.wrapping_add(1);
+        let sub = ServerSubscription { prefix, callback };
+        self.subscriptions.insert(id, sub);
+        id
+    }
+
+    async fn unsubscribe(&mut self, subuid: u32) {
+        self.subscriptions.remove(&subuid);
+    }
+
     async fn update_topic(&mut self, name: &str, new_value: NTValue) {
         if let Some(topic) = self.update_value(name, new_value, self.now()) {
             for client in self
@@ -186,9 +215,5 @@ impl State for NTServer {
                 client.send_message(NTMessage::single_text(msg)).await;
             }
         }
-    }
-
-    fn add_callback(&mut self, callback_type: CallbackType, action: impl FnMut(&Topic) + Send) {
-        unimplemented!()
     }
 }

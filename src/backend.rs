@@ -1,8 +1,9 @@
-use crate::nt::callback::CallbackType;
+use crate::nt::callback::{CallbackType, ValueCallback};
 use crate::nt::topic::{Topic, TopicFlags};
 use crate::proto::prelude::NTValue;
 use async_trait::async_trait;
 use std::collections::HashMap;
+use crate::nt::TopicSnapshot;
 
 pub mod client;
 pub mod server;
@@ -32,13 +33,11 @@ pub trait State {
 
     async fn release(&mut self, name: &str);
 
+    async fn subscribe(&mut self, prefix: String, callback: Box<ValueCallback>) -> u32;
+
+    async fn unsubscribe(&mut self, subuid: u32);
+
     async fn update_topic(&mut self, name: &str, new_value: NTValue);
 
     async fn update_topic_flags(&mut self, name: &str, flags: TopicFlags);
-
-    fn add_callback(
-        &mut self,
-        callback_type: CallbackType,
-        action: impl FnMut(&Topic) + Send + 'static,
-    );
 }
