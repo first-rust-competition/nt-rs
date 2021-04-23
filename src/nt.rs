@@ -31,7 +31,7 @@ impl NetworkTables<Client> {
     /// at which point the connection will be valid to send and receive data over
     pub async fn connect(ip: &str, client_name: &str) -> Result<NetworkTables<Client>> {
         let (close_tx, close_rx) = channel::<()>(1);
-        let state = ClientState::new(ip.to_string(), client_name.to_string(), close_rx).await;
+        let state = ClientState::new(ip.to_string(), client_name.to_string(), close_rx).await?;
         Ok(NetworkTables { state, close_tx })
     }
 

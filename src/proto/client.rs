@@ -1,7 +1,7 @@
 use super::State;
 use crate::error::Error;
 use crate::{
-    Action, CallbackType, ConnectionAction, ConnectionCallbackType, EntryData, EntryValue,
+    Action, CallbackType, ConnectionAction, ConnectionCallbackType, EntryData, EntryValue, Result,
     RpcCallback,
 };
 use futures_channel::mpsc::{channel, unbounded, Receiver, Sender, UnboundedSender};
@@ -33,9 +33,13 @@ pub struct ClientState {
 }
 
 impl ClientState {
-    pub async fn new(ip: String, name: String, close_rx: Receiver<()>) -> Arc<Mutex<ClientState>> {
+    pub async fn new(
+        ip: String,
+        name: String,
+        close_rx: Receiver<()>,
+    ) -> Result<Arc<Mutex<ClientState>>> {
         let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();
-        let (ready_tx, mut ready_rx) = unbounded::<()>();
+        let (ready_tx, mut ready_rx) = unbounded::<Result<()>>();
 
         let state = Arc::new(Mutex::new(ClientState {
             connected: false,
@@ -53,12 +57,14 @@ impl ClientState {
         let rt_state = state.clone();
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
-            rt.block_on(conn::connection(rt_state, packet_rx, ready_tx, close_rx))
-                .unwrap();
+            let mut tx2 = ready_tx.clone();
+            if let Err(e) = rt.block_on(conn::connection(rt_state, packet_rx, ready_tx, close_rx)) {
+                tx2.unbounded_send(Err(e));
+            }
         });
 
-        ready_rx.next().await;
-        state
+        ready_rx.next().await.unwrap()?;
+        Ok(state)
     }
 
     #[cfg(feature = "websocket")]

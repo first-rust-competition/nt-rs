@@ -3,6 +3,7 @@ use crate::proto::client::ClientState;
 #[cfg(feature = "websocket")]
 use crate::proto::ws::WSCodec;
 use crate::proto::State;
+use crate::Result;
 use crate::{CallbackType, ConnectionCallbackType, EntryData};
 use futures_channel::mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
 use futures_util::future::Either;
@@ -23,7 +24,7 @@ use url::Url;
 pub async fn connection(
     state: Arc<Mutex<ClientState>>,
     packet_rx: UnboundedReceiver<Box<dyn Packet>>,
-    ready_tx: UnboundedSender<()>,
+    ready_tx: UnboundedSender<Result<()>>,
     close_rx: Receiver<()>,
 ) -> crate::Result<()> {
     let (ip, client_name) = {
@@ -40,7 +41,7 @@ pub async fn connection(
             if let Ok(packet) = msg {
                 match packet {
                     ReceivedPacket::ServerHelloComplete => {
-                        ready_tx.unbounded_send(()).unwrap();
+                        ready_tx.unbounded_send(Ok(())).unwrap();
                         let mut state = rx_state.lock().unwrap();
                         state
                             .connection_callbacks
