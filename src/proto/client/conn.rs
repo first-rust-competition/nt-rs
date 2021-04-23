@@ -2,8 +2,8 @@ use crate::error::Error;
 use crate::proto::client::ClientState;
 #[cfg(feature = "websocket")]
 use crate::proto::ws::WSCodec;
-use crate::Result;
 use crate::proto::State;
+use crate::Result;
 use crate::{CallbackType, ConnectionCallbackType, EntryData};
 use futures_channel::mpsc::{Receiver, UnboundedReceiver, UnboundedSender};
 use futures_util::future::Either;

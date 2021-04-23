@@ -1,7 +1,7 @@
 use super::State;
 use crate::error::Error;
 use crate::{
-    Result, Action, CallbackType, ConnectionAction, ConnectionCallbackType, EntryData, EntryValue,
+    Action, CallbackType, ConnectionAction, ConnectionCallbackType, EntryData, EntryValue, Result,
     RpcCallback,
 };
 use futures_channel::mpsc::{channel, unbounded, Receiver, Sender, UnboundedSender};
@@ -33,7 +33,11 @@ pub struct ClientState {
 }
 
 impl ClientState {
-    pub async fn new(ip: String, name: String, close_rx: Receiver<()>) -> Result<Arc<Mutex<ClientState>>> {
+    pub async fn new(
+        ip: String,
+        name: String,
+        close_rx: Receiver<()>,
+    ) -> Result<Arc<Mutex<ClientState>>> {
         let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();
         let (ready_tx, mut ready_rx) = unbounded::<Result<()>>();
 
