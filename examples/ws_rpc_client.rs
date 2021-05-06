@@ -1,11 +1,10 @@
-
 #[tokio::main]
 #[cfg(feature = "websocket")]
 async fn main() -> anyhow::Result<()> {
     use nt::*;
     use std::thread;
     use std::time::Duration;
-    let mut nt = NetworkTables::connect_ws("ws://127.0.0.1:1735", "nt-ws").await?;
+    let nt = NetworkTables::connect_ws("ws://127.0.0.1:1735", "nt-ws").await?;
 
     let mut i = 0;
     loop {
