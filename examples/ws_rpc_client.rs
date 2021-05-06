@@ -1,6 +1,7 @@
+
 #[tokio::main]
 #[cfg(feature = "websocket")]
-async fn main() -> Result<()> {
+async fn main() -> anyhow::Result<()> {
     use nt::*;
     use std::thread;
     use std::time::Duration;
@@ -26,6 +27,6 @@ async fn main() -> Result<()> {
 
 #[tokio::main]
 #[cfg(not(feature = "websocket"))]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     panic!("Example needs the websocket feature enabled")
 }
