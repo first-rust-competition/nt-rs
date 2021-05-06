@@ -47,7 +47,7 @@ impl ServerState {
             rpc_actions: HashMap::new(),
         }));
 
-        let rt_state = state.clone();
+        let rt_state = Arc::clone(&state);
         spawn_rt(ip, rt_state, close_rx);
 
         state
