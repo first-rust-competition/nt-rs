@@ -40,7 +40,7 @@ impl NetworkTables<Client> {
     /// This function should _only_ be called if you are certain that the previous connection is dead.
     /// Connection status can be determined using callbacks specified with `add_connection_callback`.
     pub async fn reconnect(&mut self) {
-        let rt_state = self.state.clone();
+        let rt_state = Arc::clone(&self.state);
 
         let (close_tx, close_rx) = channel::<()>(1);
         let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();
@@ -82,7 +82,7 @@ impl NetworkTables<Client> {
     /// Connection status can be determined using callbacks specified with `add_connection_callback`.
     #[cfg(feature = "websocket")]
     pub async fn reconnect_ws(&mut self) {
-        let rt_state = self.state.clone();
+        let rt_state = Arc::clone(&self.state);
 
         let (close_tx, close_rx) = channel::<()>(1);
         let (packet_tx, packet_rx) = unbounded::<Box<dyn Packet>>();

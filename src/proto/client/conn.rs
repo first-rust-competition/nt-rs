@@ -35,7 +35,7 @@ pub async fn connection(
     let addr = conn.local_addr().unwrap();
     let (mut tx, mut rx) = NTCodec.framed(conn).split();
 
-    let rx_state = state.clone();
+    let rx_state = Arc::clone(&state);
     tokio::spawn(async move {
         while let Some(msg) = rx.next().await {
             if let Ok(packet) = msg {
@@ -61,7 +61,7 @@ pub async fn connection(
         }
     });
 
-    let tick_state = state.clone();
+    let tick_state = Arc::clone(&state);
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::new(1, 0));
 
@@ -77,7 +77,7 @@ pub async fn connection(
 
     let mut rx = select(packet_rx.map(Either::Left), close_rx.map(Either::Right));
 
-    let tx_state = state.clone();
+    let tx_state = Arc::clone(&state);
     tx.send(Box::new(ClientHello::new(NTVersion::V3, client_name)))
         .await
         .unwrap();
@@ -153,7 +153,7 @@ pub async fn connection_ws(
         }
     });
 
-    let tick_state = state.clone();
+    let tick_state = Arc::clone(&state);
     tokio::spawn(async move {
         let mut interval = tokio::time::interval(Duration::new(1, 0));
 

@@ -49,7 +49,7 @@ pub async fn connection(
                     addr,
                     NTCodec.framed(conn).map_err(Error::from),
                     rx,
-                    state.clone(),
+                    Arc::clone(&state),
                 ));
             }
         }
@@ -133,7 +133,7 @@ async fn handle_ws_conn(
         addr,
         codec.map_err(Error::from),
         rx,
-        state.clone(),
+        Arc::clone(&state),
     ));
     Ok(())
 }
