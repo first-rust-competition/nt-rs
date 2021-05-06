@@ -1,7 +1,7 @@
-use nt::*;
-
 #[tokio::main]
+#[cfg(feature = "websocket")]
 async fn main() {
+    use nt::*;
     let mut nt = NetworkTables::connect_ws("ws://127.0.0.1:1735", "nt-ws")
         .await
         .unwrap();
@@ -23,4 +23,10 @@ async fn main() {
         .expect("Client is not connected to the server.");
     println!("Entry should have been created: {}", id);
     loop {}
+}
+
+#[tokio::main]
+#[cfg(not(feature = "websocket"))]
+async fn main() {
+    panic!("Example needs the websocket feature enabled")
 }
