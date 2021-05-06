@@ -55,11 +55,15 @@ impl ClientState {
         }));
 
         let rt_state = state.clone();
+        let ready_tx_clone = ready_tx.clone(); // clone ready_tx and move inside thread
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
-            let mut tx2 = ready_tx.clone();
             if let Err(e) = rt.block_on(conn::connection(rt_state, packet_rx, ready_tx, close_rx)) {
-                tx2.unbounded_send(Err(e));
+                /*
+                 * If unbounded_send panics, then there is no more memory
+                 * to send connection error info to main thread.
+                 */
+                ready_tx_clone.unbounded_send(Err(e)).unwrap();
             }
         });
 

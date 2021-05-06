@@ -13,6 +13,5 @@ async fn main() -> anyhow::Result<()> {
         println!("{} => {:?}", id, data);
     }
 
-    loop {}
-    Ok(())
+    loop { /* Spin lock */ }
 }
