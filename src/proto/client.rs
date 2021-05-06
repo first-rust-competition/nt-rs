@@ -54,7 +54,7 @@ impl ClientState {
             next_rpc_id: 0,
         }));
 
-        let rt_state = state.clone();
+        let rt_state = Arc::clone(&state);
         let ready_tx_clone = ready_tx.clone(); // clone ready_tx and move inside thread
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
@@ -93,7 +93,7 @@ impl ClientState {
             next_rpc_id: 0,
         }));
 
-        let rt_state = state.clone();
+        let rt_state = Arc::clone(&state);
         thread::spawn(move || {
             let mut rt = Runtime::new().unwrap();
 
